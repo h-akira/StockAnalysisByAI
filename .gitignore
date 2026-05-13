@@ -1,0 +1,8 @@
+secret.json
+pre-research/edinet/env/
+pre-research/edinet/data/
+
+# Official EDINET specs (re-downloadable from disclosure2dl.edinet-fsa.go.jp)
+docs/edinet/*.pdf
+docs/edinet/*.xlsx
+docs/edinet/*.txt
