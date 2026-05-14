@@ -90,6 +90,9 @@ ISSUER_PREFIX_TEMPLATE = "jpcrp030000-asr_{edinet_code}-000"
 # Context IDs used for the current fiscal year (consolidated, no member).
 CTX_DURATION = "CurrentYearDuration"   # flow items (PL, CF)
 CTX_INSTANT = "CurrentYearInstant"     # stock items (BS at fiscal year-end)
+# Shares-outstanding fields are disclosed as of filing date, not fiscal year-end.
+# This is a separate context distinct from CTX_INSTANT.
+CTX_FILING_DATE = "FilingDateInstant"
 
 # Path A whitelist: element specs for main IFRS consolidated statements.
 # Each entry: (item_key, [(prefix, localname, context), ...]).
@@ -145,6 +148,12 @@ PATH_A_ITEMS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ]),
     ("InvestingCF", []),
     ("FinancingCF", []),
+    ("SharesOutstanding", [
+        # Total number of issued shares as of the fiscal year-end. Reported on
+        # the FilingDateInstant context, not CurrentYearInstant — different
+        # from BS items. Same element name observed for both Toyota and Sony.
+        ("jpcrp_cor", "NumberOfIssuedSharesAsOfFiscalYearEndIssuedSharesTotalNumberOfSharesEtc", CTX_FILING_DATE),
+    ]),
 ]
 
 # Path B whitelist: element specs from SummaryOfBusinessResults.
@@ -161,6 +170,7 @@ PATH_B_ITEMS: list[tuple[str, str, str]] = [
     ("OperatingCF", "CashFlowsFromUsedInOperatingActivitiesIFRSSummaryOfBusinessResults", CTX_DURATION),
     ("InvestingCF", "CashFlowsFromUsedInInvestingActivitiesIFRSSummaryOfBusinessResults", CTX_DURATION),
     ("FinancingCF", "CashFlowsFromUsedInFinancingActivitiesIFRSSummaryOfBusinessResults", CTX_DURATION),
+    ("SharesOutstanding", "", ""),  # not in Summary — Path A only
 ]
 
 
@@ -401,6 +411,44 @@ def extract_path_b(tree: etree._ElementTree, nsmap: dict[str, str]) -> dict[str,
     return results
 
 
+def merge_paths(path_a: dict[str, dict], path_b: dict[str, dict]) -> dict[str, dict]:
+    """Pick the best value per item from Path A and Path B.
+
+    Selection rule: Path A wins where it has a value (main IFRS statements are
+    detailed and authoritative). Path B fills the gaps (EPS, CF triple etc.
+    that Path A's current whitelist does not yet cover).
+
+    Free cash flow is computed from operating + investing CF.
+
+    Returns a dict keyed by item name with the same fact shape (value/unit/
+    decimals/source). Values stay as strings for downstream typed conversion.
+    """
+    items = [k for k, _ in PATH_A_ITEMS]
+    merged: dict[str, dict] = {}
+    for key in items:
+        a = path_a.get(key) or {"value": None}
+        b = path_b.get(key) or {"value": None}
+        if a.get("value") is not None:
+            merged[key] = {**a, "path": "A"}
+        elif b.get("value") is not None:
+            merged[key] = {**b, "path": "B"}
+        else:
+            merged[key] = {"value": None, "source": "not found", "path": None}
+
+    op = merged.get("OperatingCF", {}).get("value")
+    inv = merged.get("InvestingCF", {}).get("value")
+    if op is not None and inv is not None:
+        merged["FreeCF"] = {
+            "value": str(int(op) + int(inv)),
+            "unit": "JPY", "decimals": "-6",
+            "source": "OperatingCF + InvestingCF",
+            "path": "computed",
+        }
+    else:
+        merged["FreeCF"] = {"value": None, "source": "depends on CF rows", "path": None}
+    return merged
+
+
 def _fmt_value(item: dict) -> str:
     v = item.get("value")
     if v is None:
@@ -413,6 +461,8 @@ def _fmt_value(item: dict) -> str:
             return f"{v} {unit}"
     if unit == "JPYPerShares":
         return f"{float(v):>20,.2f} JPY/share"
+    if unit == "shares":
+        return f"{int(v):>20,} shares"
     return f"{v} {unit}"
 
 

@@ -50,7 +50,9 @@ pre-research/edinet/
 - [x] Step 2: 有価証券報告書 一覧取得（`step2_doc_list.py`、窓スキャン方式）
 - [x] Step 3a: XBRL パース・主要勘定科目抽出（`step3a_lxml.py`、9項目取得・2社で実証）
 - [x] Step 3 完了判定: 会社間差異のナレッジ化（`xbrl_company_variation.md`）。Step 3b（Arelle）はスコープ外に判断
-- [ ] Step 4: 複数期の時系列 DataFrame 化
+- [x] Step 4: 複数期の時系列 DataFrame 化（`step4_timeseries.py`、トヨタ3期で実証）
+- [x] Step 5: 指標計算（`step5_metrics.py`、PER/PBR/ROE等を二社で実証・株式分割課題を発見）
+- [ ] Step 6: HTML グラフ出力
 
 ---
 
