@@ -52,7 +52,8 @@ pre-research/edinet/
 - [x] Step 3 完了判定: 会社間差異のナレッジ化（`xbrl_company_variation.md`）。Step 3b（Arelle）はスコープ外に判断
 - [x] Step 4: 複数期の時系列 DataFrame 化（`step4_timeseries.py`、トヨタ3期で実証）
 - [x] Step 5: 指標計算（`step5_metrics.py`、PER/PBR/ROE等を二社で実証・株式分割課題を発見）
-- [ ] Step 6: HTML グラフ出力
+- [x] Step 6: HTML グラフ出力（`step6_html_output.py`、スタンドアロンHTML・二社比較を実証）
+- [x] **全ステップ完了**。検証結果は verification_results.md、本実装の判断材料は xbrl_company_variation.md 参照
 
 ---
 
