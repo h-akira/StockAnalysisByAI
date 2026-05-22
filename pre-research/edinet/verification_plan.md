@@ -53,7 +53,8 @@ pre-research/edinet/
 - [x] Step 4: 複数期の時系列 DataFrame 化（`step4_timeseries.py`、トヨタ3期で実証）
 - [x] Step 5: 指標計算（`step5_metrics.py`、PER/PBR/ROE等を二社で実証・株式分割課題を発見）
 - [x] Step 6: HTML グラフ出力（`step6_html_output.py`、スタンドアロンHTML・二社比較を実証）
-- [x] **全ステップ完了**。検証結果は verification_results.md、本実装の判断材料は xbrl_company_variation.md 参照
+- [ ] Step 7: 株式分割補正手法の選定（`step7_split_adjust.py`、本実装 P4 着手前提）
+- [x] Step 1〜6 完了。本実装が P3.5 で Step7 追検証を要求したため再オープン中
 
 ---
 
@@ -152,6 +153,47 @@ pre-research/edinet/
 - ROE・自己資本比率の推移
 
 **合否基準**: ブラウザで開けるスタンドアロン HTML が生成される
+
+---
+
+### Step 7: 株式分割補正の手法選定（本実装 P4 の前提検証）
+
+**背景**
+- Step 5 で判明した「EDINET の EPS は報告書提出時点の発行済株式数で焼き付け、yfinance の Close は最新分割比率で遡及調整」という不整合により、分割が報告書提出より後に起きた期で PER/PBR が大きく狂う（Sony 6758 FY2022 で PER=3.16 → 正しくは 14.7）。
+- 本実装 P4 の `scripts/split_adjust.py` 実装手法を決めるための実機検証。
+
+**候補手法**
+- **(a) restated EPS 方式**: 最新年の有報の SummaryOfBusinessResults（直近5年分の Prior\*YearDuration コンテキスト）から post-split EPS を取得し、各年に当てはめる。Sony FY2022 で **Prior2YearDuration=162.71 → PER=14.7** が pre-research Step5 で実証済み。
+- **(b) yfinance.Ticker.splits 方式**: yfinance から累積分割比率を取得し、各年の raw EPS を割って統一。データソースが yfinance に一元化される利点があるが、**`Ticker.splits` 自体の挙動は未検証**。
+
+**確認したいこと**
+
+1. **yfinance.Ticker.splits の信頼性**:
+   - TSE上場銘柄（`.T` ティッカー）で分割履歴が取れるか
+   - 複数回分割があった銘柄で累積比率を正しく合成できるか
+   - 5年より古い分割も取れるか
+   - 株式併合（reverse split）があった場合の符号
+2. **(a) と (b) の PER 一致**: Sony 6758 の FY2020〜FY2024 を両手法で計算し、PER が一致するか（誤差±1%以内が目安）
+3. **(a) の射程**: SummaryOfBusinessResults は直近5年分のため、6年以上前の期は (a) では救えないことを実機確認
+4. **エッジケース**: 分割実施年（FY中に分割があった期）の扱い、(a)/(b) で違いが出るか
+
+**検証対象銘柄**
+- **Sony 6758**: 2024-10-01 に 1:5 分割（確定済み）。FY2020〜FY2024 を対象に両手法を比較
+- 初期検証は Sony 1 社に絞る。Step7 結果次第で追加銘柄を検討する（複数回分割／株式併合のエッジケースは将来の宿題として残し、本 Step では深掘りしない）
+
+**実装方針**
+- `pre-research/edinet/step7_split_adjust.py` 新設
+- 既存の step5_metrics.py を流用しつつ、(a) と (b) 両方の PER を並べて出力
+- 出力: `data/split_adjust_{sec_code}.csv` に
+  `period_end, raw_eps, restated_eps_(a), split_ratio_(b), per_raw, per_a, per_b, agreement`
+  カラムを並べる
+
+**合否基準**
+- (a) と (b) の PER が Sony 6758 の FY2020〜FY2024 で概ね一致する（誤差±1%以内）
+- yfinance.Ticker.splits が Sony 6758 で動くことを確認（1:5 分割が累積比 5.0 として取れる）
+- 5年超期間で (a) が NaN になることを実機確認、(b) でカバーできるかを併せて記録
+- 結果と教訓を `verification_results.md` の Step 7 セクションに追記
+- 本実装 P4 で採用する手法と、片方を採れない場合のフォールバック条件を明示
 
 ---
 

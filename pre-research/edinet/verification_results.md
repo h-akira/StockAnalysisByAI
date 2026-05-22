@@ -724,5 +724,82 @@ EDINET API v2 を日本株個別分析の基盤として使えるか、Step 0〜
 | step4_timeseries | 複数期 DataFrame 化 | step3a を import |
 | step5_metrics | 指標計算（+yfinance） | step4 出力を入力 |
 | step6_html_output | スタンドアロンHTML | step4/5 出力を入力 |
+| step7_split_adjust | 株式分割補正の手法選定 | step3a・step4 出力 + yfinance |
 
-step3a が抽出の単一の真実源で、step4〜6 はそれを再利用する層構造。本実装でもこの責務分離は維持する価値がある。
+step3a が抽出の単一の真実源で、step4〜7 はそれを再利用する層構造。本実装でもこの責務分離は維持する価値がある。
+
+---
+
+## Step 7: 株式分割補正の手法選定 ⚠️（一部 FAIL → 採用方針見直し）
+
+**実施日**: 2026-05-22
+**スクリプト**: [step7_split_adjust.py](step7_split_adjust.py)
+**ライブラリ**: `lxml`, `pandas`, `yfinance==1.3.0`
+**対象**: Sony 6758 のみ（FY2022〜FY2024）
+
+### 背景
+
+Step 5 で判明した PER 不整合（EDINET 提出時点 EPS と yfinance 最新分割調整済み Close の基準ズレ）の補正方法として、本実装 P4 に向けて2手法を並行検証した:
+
+- **(a) restated EPS 方式**: 最新報告書の SummaryOfBusinessResults から Prior\*YearDuration コンテキスト経由で post-split EPS を取る
+- **(b) `yfinance.Ticker.splits` 方式**: yfinance から累積分割比率を取得し raw EPS を割って統一
+
+### 実機結果
+
+```
+period_end  raw_eps  eps_a_restated  eps_b_split_adj   price  per_raw   per_a   per_b  cum_split_after  abs_diff_per_pct
+2023-03-31   758.38         162.71          151.68    2,397    3.16   14.73   15.80           5.0           7.27%
+2024-03-31   788.29         157.66          157.66    2,594    3.29   16.45   16.45           5.0           0.00%
+2025-03-31   188.71         188.71          188.71    3,765   19.95   19.95   19.95           1.0           0.00%
+```
+
+### 検証項目ごとの判定
+
+| 検証項目 | 結果 |
+|---------|------|
+| yfinance.Ticker.splits が動くか（6758.T） | ✅ PASS。1件返却（2024-09-27 ratio=5.0、公式の分割日 2024-10-01 と1営業日ズレ＝yfinance は ex-date 表記） |
+| (a) と (b) の PER 一致（誤差±1%以内） | ⚠️ **FY2023 で 7.27% 乖離** — FAIL。FY2024/2025 は誤差 0.001% 以下で PASS |
+| 5年超期間で (a) が NaN、(b) でカバー | ⏸️ 検証不可（Sony 6758 の doc_list は3期分のみ。Skill 側の bootstrap 完了後に再検証） |
+
+### FY2023 の乖離原因（実機確認した事実）
+
+`eps_b_split_adj` = `758.38 / 5.0` = **151.68**（pre-research Step 4 の生EPS を機械的に分割比で割った値）。
+`eps_a_restated` = **162.71**（最新報告書 S100W19Q の Prior2YearDuration から取得した値）。
+
+原因の仮説:
+
+- IFRS basic EPS = 親会社株主帰属当期純利益 ÷ **期中平均株式数**
+- 「期中平均株式数」は **自己株取得・新株発行で年度内に変動した分を加重平均**したもの
+- 分割比 5.0 で機械的に割ると「期中平均」の構成が無視される
+- 一方、最新報告書の Prior2YearDuration は **当該期の期中平均株式数を分割後ベースで再計算した正規の数字** → 自己株式の動きまで反映される
+
+**つまり (b) は「単純な分割比割り戻し」であって厳密な restated EPS ではない**。分割があった期はだいたい合うが、自己株取得・新株発行が活発な企業ほどズレが拡大する可能性が高い。Sony は自己株式取得を継続的に実施している企業なので、その差が FY2023 に出たと考えられる。
+
+### Pass 判定
+
+⚠️ **部分 PASS / 部分 FAIL**:
+- yfinance.Ticker.splits が動くこと自体は PASS
+- (a) と (b) の一致は **FAIL**（分割直前期で7%乖離。本検証の合否基準を満たさない）
+- 5年超期間のカバー検証は実施不可（doc_list 3期分のみ）
+
+### 教訓（本実装 P4 への含意）
+
+1. **(b) を単独採用してはいけない**: 自己株取得が活発な企業で PER がズレる。誤差 7% は投資判断で許容できない
+2. **(a) を主軸にすべき**: Prior\*YearDuration は EDINET 側で「期中平均株式数の再計算済み」値なので IFRS 定義に厳密
+3. **(a) の射程外（6年以上前）はどうするか**:
+   - 案 X: 「データなし」として PER を NaN で出す（厳密だが過去長期分析できない）
+   - 案 Y: (b) でフォールバック計算して「近似値」と注記（実用性 vs 厳密性のトレードオフ）
+   - 案 Z: 「最新3〜5年のみ表示」とスコープを切る（plan §1 の「主に直近数年の財務推移を見る」用途と整合）
+4. **`yfinance.Ticker.splits` の ex-date 1日ズレに注意**: 公式分割日 2024-10-01 に対して yfinance は 2024-09-27 を返した。`cumulative_split_after()` の比較演算子 `>` は問題なく動いたが、period_end が分割日と同じ日付の場合の境界挙動は要確認
+
+### 結論
+
+本実装 P4 では以下の方針を提案する（ユーザー確認後に確定）:
+
+- **(a) restated EPS を主**として使う
+- (a) でカバーできない古い期は **PER を出さない（NaN + 警告）** または **(b) で近似値を出して注記**（要決定）
+- `cache/mappings/{sec_code}.json` 同様の発想で `cache/split_adjust/{sec_code}.json` を作り、「最新報告書から取れる restated EPS マッピング」を永続化する設計が綺麗
+
+### 出力ファイル
+
+- [data/split_adjust_6758.csv](data/split_adjust_6758.csv): 比較表（per_a, per_b, cum_split_after, abs_diff_per_pct カラム含）
