@@ -35,7 +35,12 @@ from pathlib import Path
 from scripts import paths
 from scripts.company_map import CompanyMapMissingError, lookup as lookup_company
 from scripts.config import ConfigError, load_edinet_config
-from scripts.doc_list import DocumentsNotBootstrappedError, find_documents_for_sec_code
+from scripts.doc_list import (
+    DocumentsNotBootstrappedError,
+    find_documents_for_sec_code,
+    find_missing_windows,
+)
+from scripts.cache_admin import clear_sec_code
 from scripts.html_report import render_report
 from scripts.json_export import write_data_json
 from scripts.metrics import build_metrics, save_metrics
@@ -52,13 +57,22 @@ def _emit(payload: dict) -> int:
 def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
     """Run timeseries + metrics for one sec_code. Returns a per-code result."""
     docs = find_documents_for_sec_code(sec_code)
-    if not docs:
+    missing = find_missing_windows(sec_code, years=args.years)
+    if not docs or missing:
         return {
             "sec_code": sec_code,
             "status": "needs_bootstrap",
             "reason": (
-                f"No annual reports (docType=120) found for {sec_code} in "
-                f"cache/documents/. Run: python3 ${{CLAUDE_SKILL_DIR}}/scripts/bootstrap.py fetch-documents --years 10"
+                f"No annual reports found for {sec_code} in cache/documents/."
+                if not docs else
+                f"Bootstrap is incomplete for {sec_code}: {len(missing)} weekday(s) "
+                f"in the expected submission window are missing from cache."
+            ),
+            "missing_weekday_count": len(missing),
+            "missing_window_sample": missing[:5] + (["..."] if len(missing) > 5 else []),
+            "suggested_command": (
+                "python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py fetch-documents "
+                f"--years {args.years}"
             ),
         }
 
@@ -108,6 +122,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         cfg = load_edinet_config()
     except ConfigError as e:
         return _emit({"status": "config_error", "reason": str(e)})
+
+    # --force-refresh wipes the cheap per-sec-code caches (derived/prices/
+    # split-adjust) so the pipeline re-derives them from scratch. mappings is
+    # NOT included on purpose — those are AI-judgement results that the user
+    # opts into clearing via `cache_admin clear --mappings`.
+    if args.force_refresh:
+        for sc in args.sec_code:
+            clear_sec_code(sc, types=["derived", "prices", "split-adjust"])
 
     # Validate every sec_code up front; fail fast with a clear message.
     for sc in args.sec_code:
@@ -196,6 +218,10 @@ def build_parser() -> argparse.ArgumentParser:
                            help="process only the latest N annual reports per code (debug)")
     p_analyze.add_argument("--output-dir", type=str, default=None,
                            help="override the CWD output dir for the HTML report")
+    p_analyze.add_argument("--years", type=int, default=10,
+                           help="how many years of submission windows to check for completeness")
+    p_analyze.add_argument("--force-refresh", action="store_true",
+                           help="discard per-sec-code derived/prices/split-adjust before analyzing")
     p_analyze.set_defaults(func=cmd_analyze)
 
     return parser

@@ -110,17 +110,47 @@ def parse_chunk_spec(spec: str) -> tuple[int, int]:
 # EDINET API
 # ---------------------------------------------------------------------------
 
-def fetch_documents_json(api_key: str, target_date: date, *, timeout: float = 30.0) -> dict | None:
-    """Fetch documents.json for one date. Returns None on 404 (no filings)."""
-    resp = requests.get(
-        BASE_URL,
-        params={"date": target_date.isoformat(), "type": 2, "Subscription-Key": api_key},
-        timeout=timeout,
-    )
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json()
+def fetch_documents_json(
+    api_key: str,
+    target_date: date,
+    *,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    backoff_seconds: float = 5.0,
+) -> dict | None:
+    """Fetch documents.json for one date. Returns None on 404 (no filings).
+
+    Retries with exponential backoff on HTTP 429 (rate limit) and 5xx errors.
+    Other errors propagate as requests.RequestException to the caller, which
+    counts them via --max-errors and may abort the whole run.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(
+                BASE_URL,
+                params={"date": target_date.isoformat(), "type": 2, "Subscription-Key": api_key},
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            # Network-level failure (DNS/connection/timeout); retry transiently.
+            last_exc = e
+            if attempt + 1 < max_retries:
+                time.sleep(backoff_seconds * (2 ** attempt))
+                continue
+            raise
+
+        if resp.status_code == 404:
+            return None
+        if resp.status_code == 429 or 500 <= resp.status_code < 600:
+            if attempt + 1 < max_retries:
+                time.sleep(backoff_seconds * (2 ** attempt))
+                continue
+            resp.raise_for_status()
+        resp.raise_for_status()
+        return resp.json()
+    # Loop exhausted without return — only reachable through network exception path.
+    raise last_exc if last_exc else RuntimeError("fetch_documents_json: retry loop exhausted")
 
 
 def documents_cache_path(target_date: date) -> Path:

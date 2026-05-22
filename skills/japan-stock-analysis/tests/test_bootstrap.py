@@ -117,6 +117,32 @@ def test_fetch_and_cache_404_writes_empty_marker(monkeypatch, tmp_path) -> None:
     assert body["metadata"]["status"] == "404"
 
 
+def test_fetch_documents_json_retries_429_then_succeeds(monkeypatch, tmp_path) -> None:
+    """429 on first attempt should not abort — retry and succeed."""
+    _patch_cache_dir(monkeypatch, tmp_path)
+    rate_limited = MagicMock(status_code=429)
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"metadata": {"status": "200"}, "results": []}
+
+    # Skip the sleep so the test is fast.
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _: None)
+    with patch.object(bootstrap.requests, "get", side_effect=[rate_limited, ok]):
+        out = bootstrap.fetch_documents_json("KEY", date(2026, 5, 22), max_retries=3, backoff_seconds=0)
+    assert out["metadata"]["status"] == "200"
+
+
+def test_fetch_documents_json_eventually_raises_on_persistent_429(monkeypatch, tmp_path) -> None:
+    """Persistent 429 across all retries should raise (caller counts via --max-errors)."""
+    _patch_cache_dir(monkeypatch, tmp_path)
+    rate_limited = MagicMock(status_code=429)
+    rate_limited.raise_for_status.side_effect = bootstrap.requests.HTTPError("429")
+
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _: None)
+    with patch.object(bootstrap.requests, "get", return_value=rate_limited):
+        with pytest.raises(bootstrap.requests.HTTPError):
+            bootstrap.fetch_documents_json("KEY", date(2026, 5, 22), max_retries=2, backoff_seconds=0)
+
+
 # ---------- build_company_map ----------
 
 def test_build_company_map_filters_unlisted_rows() -> None:

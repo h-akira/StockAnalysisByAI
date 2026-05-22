@@ -19,6 +19,7 @@ mapping; see plan.md §4.4.
 
 from __future__ import annotations
 
+import time
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -107,21 +108,47 @@ def xbrl_cache_path(doc_id: str) -> Path:
     return paths.XBRL_DIR / f"{doc_id}.zip"
 
 
-def download_xbrl_zip(api_key: str, doc_id: str, *, timeout: float = 60.0) -> Path:
-    """Download XBRL zip (type=1) into cache/xbrl/{doc_id}.zip. Idempotent."""
+def download_xbrl_zip(
+    api_key: str,
+    doc_id: str,
+    *,
+    timeout: float = 60.0,
+    max_retries: int = 3,
+    backoff_seconds: float = 5.0,
+) -> Path:
+    """Download XBRL zip (type=1) into cache/xbrl/{doc_id}.zip. Idempotent.
+
+    Retries with exponential backoff on HTTP 429 and 5xx, and on network
+    exceptions (DNS/connection/timeout). Other 4xx errors propagate.
+    """
     paths.ensure_cache_dirs()
     zip_path = xbrl_cache_path(doc_id)
     if zip_path.exists():
         return zip_path
     url = f"{BASE_URL}/{doc_id}"
-    resp = requests.get(
-        url,
-        params={"type": 1, "Subscription-Key": api_key},
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    zip_path.write_bytes(resp.content)
-    return zip_path
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(
+                url,
+                params={"type": 1, "Subscription-Key": api_key},
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            last_exc = e
+            if attempt + 1 < max_retries:
+                time.sleep(backoff_seconds * (2 ** attempt))
+                continue
+            raise
+        if resp.status_code == 429 or 500 <= resp.status_code < 600:
+            if attempt + 1 < max_retries:
+                time.sleep(backoff_seconds * (2 ** attempt))
+                continue
+            resp.raise_for_status()
+        resp.raise_for_status()
+        zip_path.write_bytes(resp.content)
+        return zip_path
+    raise last_exc if last_exc else RuntimeError("download_xbrl_zip: retry loop exhausted")
 
 
 def find_public_xbrl(zip_path: Path) -> str:
