@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; margin: 24px; color: #222; }
+    h1 { margin: 0 0 8px; }
+    h2 { margin-top: 32px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    .meta { color: #666; font-size: 0.9em; margin-bottom: 16px; }
+    .warning-box { background: #fff5f5; border-left: 4px solid #d33; padding: 12px 16px; margin: 16px 0; }
+    .warning-box ul { margin: 4px 0 0 16px; padding: 0; }
+    .figure { margin: 8px 0 24px; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <p class="meta">
+    生成: {{ generated_at }} | スキーマ: {{ schema_version }}
+  </p>
+
+  <div class="warning-box">
+    <strong>株式分割補正について</strong>: PER は restated EPS (最新有報の Prior*YearDuration) を用いた値です。
+    最新報告書から5年を超える過去期は PER を表示していません (NaN)。
+    PBR は SharesOutstanding の分割補正が未実装のため、分割をまたぐ期は歪む可能性があります
+    (Skill 配下 docs/json_schema.md の「既知の制約」参照)。
+    {% if warnings %}
+    <ul>
+      {% for w in warnings %}
+      <li>{{ w }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {% for fig in figures %}
+  <div class="figure">
+    {{ fig.html | safe }}
+  </div>
+  {% endfor %}
+
+  <h2>参照</h2>
+  <ul>
+    {% for sec_code, doc_ids in source_docs.items() %}
+    <li><strong>{{ sec_code }}</strong>: 有報 docID = {{ doc_ids | join(", ") }}{% if split_adjust_doc_ids.get(sec_code) %} / restated EPS 出処 docID = {{ split_adjust_doc_ids[sec_code] }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

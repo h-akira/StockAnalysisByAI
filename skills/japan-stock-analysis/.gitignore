@@ -1,0 +1,17 @@
+# Skill secret config (must never be committed)
+secret.json
+
+# Local cache (regenerable from EDINET / yfinance)
+cache/
+
+# Python virtualenv (used for local Skill development)
+env/
+.venv/
+
+# Python build / cache artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Test cache
+.pytest_cache/
