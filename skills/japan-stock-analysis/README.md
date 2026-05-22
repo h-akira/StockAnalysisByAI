@@ -81,3 +81,55 @@ Skill 配下を絶対パスで参照する。
 開発時 (pytest 等) の都合で `python -m scripts.X` 形式でも動くように
 各 CLI スクリプトの先頭で sys.path 調整が入っている。本番運用 (SKILL.md) では
 常に `${CLAUDE_SKILL_DIR}` 絶対パス方式を使う。
+
+## テスト
+
+```bash
+# 仮想環境にテスト依存をインストール
+env/bin/pip install pytest
+
+# 全テスト実行（ネットワーク不要、約 3 秒で 90 件）
+env/bin/pytest tests/
+```
+
+### テスト構成
+
+| ファイル | 範囲 |
+|---------|------|
+| `test_paths.py` / `test_config.py` | パス解決、secret.json バリデーション |
+| `test_bootstrap.py` | 日付生成、チャンク分割、`fetch_documents_json` の 429 リトライ |
+| `test_doc_list.py` / `test_doc_list_windows.py` | キャッシュ済 documents の検索、銘柄の決算月ベースの提出ウィンドウ |
+| `test_xbrl_extract.py` | merge ロジック + **fixture (S100VWVY / S100W19Q)** ベースの 9 項目抽出 |
+| `test_split_adjust.py` / `test_metrics.py` | restated EPS マッピング、ratio 計算式 |
+| `test_json_export.py` / `test_html_report.py` | スキーマ生成、Jinja2 レンダリング |
+| `test_pipeline.py` | `cmd_analyze` end-to-end（fixture + yfinance モック） |
+| `test_cache_admin.py` | clear のフラグ排他・`--confirm` 安全弁 |
+
+### fixtures について
+
+`tests/fixtures/` に Toyota FY2024 (S100VWVY.zip, 2.85MB) と Sony FY2024
+(S100W19Q.zip, 1.16MB) の XBRL zip を **git 管理下**でコミットしている。
+これらは EDINET から再取得できる不変ファイル（pre-research 検証済）。
+
+### CI（将来検討）
+
+現状は **ローカル `pytest` のみ**。テストは全てネットワーク不要で動くので、
+将来 CI を入れる場合は最小構成として:
+
+```yaml
+# .github/workflows/test.yml の雛形（実装時に有効化）
+name: tests
+on: [push, pull_request]
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r skills/japan-stock-analysis/requirements.txt pytest
+      - run: pytest skills/japan-stock-analysis/tests/
+```
+
+CI 採用は Skill が他者と共同開発に入る段階で検討する。それまでは
+push 前に `env/bin/pytest tests/` を手動実行で十分。
