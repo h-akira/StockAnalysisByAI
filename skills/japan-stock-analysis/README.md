@@ -144,30 +144,227 @@ push 前に `env/bin/pytest tests/` を手動実行で十分。
 
 ## 将来の課題 (Future Work)
 
-### 銀行業の CF 三区分集計
+このセクションは将来の改善作業の起点となるよう、Phase P1〜P9 で確認した
+**全ての** 未対応事項を体系的に整理する。優先度は「実用への影響度」順:
+P0 (現在ある銘柄で誤った数値が出る) > P1 (NaN/欠落で済むが対応すれば
+精度向上) > P2 (新機能・スコープ拡張)。
 
-銀行業の連結 XBRL では `CashFlowsFromUsedInOperatingActivities` 等の
-**CF 三区分集計値が単独要素として存在しない**ことが MUFG (8306) の検証で
-判明 (Phase P8)。明細項目 `*OpeCF/*InvCF/*FinCF` は数十個あるが、その合算
-ロジックが銀行ごとに違うため標準化が難しい。
+---
 
-現状は SKILL.md §6.3 の `unresolved[]` パターンで NaN 扱いとしている。
-将来の改善余地:
-1. 銀行業向けに明細を合算するロジックを `xbrl_extract.py` に組み込む
-2. 銀行業の `mapping_resolver` が `aggregate: [element1, element2, ...]` という
-   合算指示を受けられる仕様を追加 (現状は単一 element のみ)
+### 最大の課題: 会社・業種・基準による XBRL 差異
 
-### PBR の分割補正
+P9 の 5 銘柄実機検証で明確になった通り、本 Skill の **最大の運用負荷は
+「銘柄ごとに XBRL 要素名と構造が違う」こと**。現状は2 層構造で対応:
+
+1. **ホワイトリスト** ([scripts/xbrl_extract.py](scripts/xbrl_extract.py)):
+   トヨタ・ソニーで実証された IFRS 連結製造業の典型パターン
+2. **LLM エスカレーション** ([SKILL.md §6](SKILL.md)):
+   ホワイトリスト未解決 → 候補ペイロード生成 → Claude 判定 → `cache/mappings/{sec_code}.json` 永続化
+
+P9 検証で、5 銘柄のうち **3 銘柄 (8306/9432/4502) が LLM エスカレーションを
+必要とした** (60%)。この比率は業種が広がるほど上がる見込み。以下、軸別の
+具体的課題:
+
+#### A. ホワイトリスト不足 (P0)
+
+P9 で発見:
+
+| 項目 | 不足要素 | 影響銘柄 | 提案する追加 |
+|------|---------|----------|-------------|
+| `NetSales` | `jpigp_cor:RevenueIFRS` (IFRS 標準) | 4502 武田 | Path A 候補に追加 |
+| `NetSales` | `ISSUER:OperatingRevenuesIFRS` (通信業) | 9432 NTT | 業種別フォールバック |
+| `InterestBearingDebt` | `jpigp_cor:BondsAndBorrowingsCLIFRS + NCLIFRS` (薬品/一般 IFRS) | 4502 武田 | 新パターン (Pattern 3) として追加 |
+
+**影響**: 上記を whitelist に入れれば武田は LLM 介入不要になり、Skill の
+"out-of-the-box success rate" が大幅に上がる。**最も投資対効果が高い改善項目**。
+
+#### B. `extra_mappings` の単一要素縛り (P1)
+
+現状 mapping_resolver は **1 項目 = 1 要素** しか扱えない。
+銀行業や薬品の IFRS では合算が必要なケースが多い:
+
+- **武田 IBD**: `BondsAndBorrowingsCLIFRS` + `BondsAndBorrowingsNCLIFRS`
+- **銀行 IBD (本来)**: `Deposits` + `NegotiableCertificatesOfDeposit` + 他
+- **NTT IBD (本来)**: `LongTermDebt` + `ShortTermDebt` + lease liabilities
+
+提案する仕様拡張:
+```json
+{
+  "InterestBearingDebt": {
+    "aggregate": [
+      {"element": "jpigp_cor:BondsAndBorrowingsCLIFRS", "context": "CurrentYearInstant"},
+      {"element": "jpigp_cor:BondsAndBorrowingsNCLIFRS", "context": "CurrentYearInstant"}
+    ],
+    "rationale": "..."
+  }
+}
+```
+
+`xbrl_extract._apply_extra_mappings` で `aggregate` キーがあれば各要素を
+get_fact して整数加算するパスを追加するだけ。
+
+#### C. 銀行業の CF 三区分集計 (P1)
+
+[docs/xbrl_variation_knowledge.md §8.1](docs/xbrl_variation_knowledge.md) と
+[docs/p9_smoke_results.md](docs/p9_smoke_results.md) 参照。
+
+銀行業の連結 XBRL では `CashFlowsFromUsedInOperatingActivities` 等の **CF
+三区分集計値が単独要素として存在しない**。明細項目 `*OpeCF/*InvCF/*FinCF`
+は数十個あるが、構成が銀行ごとに違う。
+
+現状は SKILL.md §6.3 の `unresolved[]` パターンで NaN 扱い (MUFG 検証)。
+将来の対応案 (B の `aggregate` 仕様があれば実現可能):
+
+1. MUFG / 三井住友 FG / みずほ FG の 3 行の `*OpeCF` 明細を実機で並べ、
+   共通する 5〜10 個の core 要素を選定して `aggregate` マッピング化
+2. 不足分があれば warnings に「approximate, X% items aggregated」と注記
+
+#### D. JGAAP 銀行業の Basic EPS (P0)
+
+[scripts/split_adjust.py](scripts/split_adjust.py) は restated EPS を
+`BasicEarningsLossPerShareIFRSSummaryOfBusinessResults` (IFRS) 一択で
+検索しているため、JGAAP 銀行 (MUFG) では一切ヒットせず PER が NaN になる。
+
+提案:
+
+- `extract_restated_eps_from_zip` で IFRS 名前空間を probe して空なら
+  JGAAP 名前空間 (`BasicEarningsLossPerShareSummaryOfBusinessResults`、
+  `IFRS` suffix なし) もフォールバック
+- 失敗時のみ Diluted EPS Summary を採用 (MUFG 検証で 8306 が現に
+  Diluted のみ提供しているのと整合)
+
+これだけで MUFG の PER が出るようになる。実装コストは小。
+
+#### E. issuer-specific namespace の運用
+
+P9 検証で、9432 NTT と 6758 Sony で `ISSUER:` プレフィックスの企業独自
+要素を採用する必要があった。本実装では既にサポートされているが、判定
+ロジックは Claude 任せ。
+
+将来:
+
+- よく使われる issuer-specific element の業界横断マッピング (例:
+  `OperatingRevenuesIFRS` を通信業 3 社で確認すれば NTT / KDDI /
+  ソフトバンク を whitelist 化できる)
+- 業種別 mapping プリセット (`cache/mappings/_industry_telecom.json`
+  のようなテンプレ) — 新規 sec_code 投入時、業種ヒットで自動マッピング
+
+---
+
+### 株式分割補正の積み残し (P1)
+
+#### F. PBR の分割未補正
 
 `SharesOutstanding` の restated 形式が `SummaryOfBusinessResults` に
 存在しないため、株式分割をまたぐ期の PBR は filing-time 基準の生
-SharesOutstanding を使う (P4 / P3.5 verification_results §Step7)。
-yfinance.Ticker.splits の累積比率で除算する手法で補正可能だが、
-EPS と同様に「期中平均株式数」を考慮しない近似値になる。本実装では
-未対応。
+SharesOutstanding を使う ([P3.5 step7 verification](../../pre-research/edinet/verification_results.md))。
 
-### 多銘柄スクリーニング
+実装案 (中難易度): yfinance.Ticker.splits の累積比率で SharesOutstanding を
+post-split basis に rebase。EPS と同様に「期中平均株式数」を考慮しない
+近似だが、PBR の桁ズレ (Sony FY2022 で実測 0.42 → 真値約 1.5) は解消する。
+
+#### G. 株式分割補正の 5 年超期間
+
+[scripts/split_adjust.py](scripts/split_adjust.py) は最新報告書の
+`Prior*YearDuration` (5 期分) しか見ない。10 年前の期は restated EPS
+不取得 → PER NaN + warning。
+
+対応案 (低難易度): 過去の年次報告書もループで読んで、報告書ごとの
+`Prior*YearDuration` をマージすれば 10〜15 年前までカバー可能。
+ただし XBRL の繰り返しダウンロードと SubtotalDuration 計算が必要。
+
+#### H. 期中平均株式数の正確な反映
+
+Step 7 で実証された通り、yfinance splits は **単純な分割比割り戻し** で
+あり、自己株取得が活発な企業 (Sony 等) では実際の restated EPS と数 %
+ずれる。本実装は restated EPS 方式を採用済みなので影響軽微だが、
+スコープ外期間で yfinance フォールバックを採用する場合は注記必須。
+
+---
+
+### scripts レイヤの将来課題 (P1)
+
+#### I. 月次決算 (4-6 月決算) のラベル誤り
+
+[scripts/html_report.py:_fiscal_labels](scripts/html_report.py) は
+"period_end の月 <=6 → year - 1、そうでなければ year" の単純ルール。
+- 3 月 / 12 月決算 (multiple cases): OK
+- **5 月決算 (例: 2876 ニッスイ) → FY が 1 年ズレる可能性**
+
+修正案: `company_map.csv` の `fiscal_month` を引いて FY を判定する。
+
+#### J. 会計基準の年度間切替
+
+同一銘柄で IFRS → JGAAP (またはその逆) に切り替わると、数値の連続性が
+崩れる (whitelist の選択候補が変わる)。本実装では年度ごとに独立に
+ホワイトリストを走らせるので **値は取れるが時系列としての比較性が
+損なわれる**。warnings に切替が起きた期を明示する仕掛けがほしい。
+
+#### K. 9432 NTT IBD のような近似マッピング
+
+P9 で 9432 NTT の IBD は `ISSUER:LongTermDebtIFRSNCLIFRS` 単独で
+マッピングしたが、本来は短期借入 + lease liabilities も含めるべき。
+Skill 用途として近似値で十分との判断だが、JSON 出力に
+`approximation: true` フィールドを設けて警告するのが筋。
+
+---
+
+### Skill ライフサイクル系の課題 (P2)
+
+#### L. company_map.csv の鮮度
+
+`cache/company_map.csv` は手動 `refresh-company-map` でしか更新されない。
+新規上場・上場廃止が即座に反映されないため、初出の sec_code 入力時に
+古い情報で誤判定する可能性。plan §3.6 では「7 日」とあったが未実装。
+
+実装案: `cache_admin info` で `company_map.mtime` が 7 日以上前なら
+warnings に出す。または pipeline analyze 冒頭で auto-refresh。
+
+#### M. yfinance 価格キャッシュの TTL
+
+[scripts/stock_price.py](scripts/stock_price.py) は 1 日 TTL だが、
+mtime ベースで荒い。期末価格だけ別途キャッシュして TTL を 7 日に
+緩める方が API 親切。
+
+#### N. CI
+
+[README §テスト](#テスト) 通り、現状ローカル pytest のみ。Skill が
+他者と共同開発に入る段階で GitHub Actions を有効化。雛形は記載済み。
+
+---
+
+### スコープ外 = 別 Skill として切り出す (P2)
+
+#### O. 多銘柄スクリーニング
 
 「PER<15 かつ ROE>10%」のような条件で全上場銘柄から候補抽出する用途は
-plan §1 の非ゴール。需要が出てきたら別 Skill `japan-stock-screening`
-として切り出すのが筋。
+plan §1 の非ゴール。本 Skill の bootstrap キャッシュ (documents +
+xbrl) は再利用できるので、別 Skill `japan-stock-screening` として
+切り出すのが筋。
+
+#### P. 株価チャート (plan §5 P10)
+
+日足/週足/月足の株価チャートを HTML レポートに統合する。yfinance は
+取得可能なのでデータ層は問題なし。Plotly の range selector を組み込めば
+時間軸切替も簡単。`scripts/chart_price.py` のスタブは P1 で作成済み
+([scripts/chart_price.py](scripts/chart_price.py))。
+
+#### Q. セクター・業種別ベンチマーク
+
+「同業他社平均 PER との比較」のような分析は plan 非ゴール。実装するなら
+P5 の JSON スキーマに `peers: []` フィールドを追加し、ベンチマーク
+ロジックを別 Skill (`japan-sector-benchmark` 等) として切り出す。
+
+#### R. リアルタイム株価・信用残・空売り
+
+EDINET の枠を超えるので別データソース (J-Quants 等) が必要。pre-research
+段階で「J-Quants は古い・期間短いので不採用」と判断 ([plan §1](../../plan.md))。
+
+---
+
+### 関連参照
+
+- [docs/p9_smoke_results.md](docs/p9_smoke_results.md): P9 検証の生データと改善余地
+- [docs/xbrl_variation_knowledge.md](docs/xbrl_variation_knowledge.md): 業種別マッピングのナレッジ (拡張の起点)
+- [docs/json_schema.md](docs/json_schema.md): data_*.json の v1.0 仕様 (拡張時の互換性管理)
+- [SKILL.md](SKILL.md): Claude が読む実行手順書
