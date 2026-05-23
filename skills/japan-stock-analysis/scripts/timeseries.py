@@ -31,18 +31,35 @@ def _typed_value(raw: str | None) -> float | int | None:
     return float(raw) if "." in raw else int(raw)
 
 
-def extract_row(api_key: str, doc: DocRecord) -> dict[str, float | int | None]:
-    """Run xbrl_extract on one filing and convert to a numeric row dict."""
-    result = fetch_and_extract(api_key, doc.doc_id, doc.edinet_code)
+def extract_row(
+    api_key: str,
+    doc: DocRecord,
+    *,
+    extra_mappings: dict[str, dict] | None = None,
+) -> tuple[dict[str, float | int | None], list[str]]:
+    """Run xbrl_extract on one filing and return (numeric row, unresolved items)."""
+    result = fetch_and_extract(
+        api_key, doc.doc_id, doc.edinet_code, extra_mappings=extra_mappings,
+    )
     row: dict[str, float | int | None] = {}
     for key in ITEM_COLUMNS:
         v = result.merged.get(key, {}).get("value")
         row[key] = _typed_value(v)
-    return row
+    return row, result.unresolved
 
 
-def build_timeseries(sec_code: str, api_key: str, *, limit: int | None = None) -> pd.DataFrame:
+def build_timeseries(
+    sec_code: str,
+    api_key: str,
+    *,
+    limit: int | None = None,
+    extra_mappings: dict[str, dict] | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
     """Build a multi-year DataFrame for one company.
+
+    Returns (df, union_unresolved_items). ``union_unresolved_items`` aggregates
+    unresolved item names across every year processed, so the caller can
+    trigger escalation if the whitelist + extra_mappings still leave gaps.
 
     ``limit`` caps the number of filings processed (newest last, oldest first
     is the natural CSV order from doc_list); useful for incremental testing.
@@ -57,12 +74,14 @@ def build_timeseries(sec_code: str, api_key: str, *, limit: int | None = None) -
         docs = docs[-limit:]
 
     rows: list[dict] = []
+    unresolved_union: set[str] = set()
     for doc in docs:
-        items = extract_row(api_key, doc)
+        items, unresolved = extract_row(api_key, doc, extra_mappings=extra_mappings)
         rows.append({"period_end": doc.period_end, **items})
+        unresolved_union.update(unresolved)
 
     df = pd.DataFrame(rows).set_index("period_end").sort_index()
-    return df
+    return df, sorted(unresolved_union)
 
 
 def save_timeseries(sec_code: str, df: pd.DataFrame) -> Path:

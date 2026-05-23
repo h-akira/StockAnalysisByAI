@@ -1,7 +1,15 @@
 # japan-stock-analysis Skill
 
 日本株（4桁証券コード）の個別分析を Claude Code から実行するための Agent Skill です。
-詳細設計は本リポジトリ直下の [plan.md](../../plan.md) と [pre-research/](../../pre-research/) を参照してください。
+
+> **このファイルは開発リポジトリ用の説明**です。Skill 配布物としてはこの README は
+> 必須ではありません。Skill 本体の利用方法は [SKILL.md](SKILL.md) を参照してください。
+>
+> 同一リポジトリ内に開発過程の設計資料 ([plan.md](../../plan.md) や
+> [pre-research/](../../pre-research/)) があり、開発時はそれらを参照しますが、
+> Skill 単体（`~/.claude/skills/japan-stock-analysis/` 等にコピー後）はそれらを
+> 必要としません — 必要なナレッジは Skill 配下 [docs/](docs/) に独立した形で
+> 入っています。
 
 ## 概要
 
@@ -133,3 +141,33 @@ jobs:
 
 CI 採用は Skill が他者と共同開発に入る段階で検討する。それまでは
 push 前に `env/bin/pytest tests/` を手動実行で十分。
+
+## 将来の課題 (Future Work)
+
+### 銀行業の CF 三区分集計
+
+銀行業の連結 XBRL では `CashFlowsFromUsedInOperatingActivities` 等の
+**CF 三区分集計値が単独要素として存在しない**ことが MUFG (8306) の検証で
+判明 (Phase P8)。明細項目 `*OpeCF/*InvCF/*FinCF` は数十個あるが、その合算
+ロジックが銀行ごとに違うため標準化が難しい。
+
+現状は SKILL.md §6.3 の `unresolved[]` パターンで NaN 扱いとしている。
+将来の改善余地:
+1. 銀行業向けに明細を合算するロジックを `xbrl_extract.py` に組み込む
+2. 銀行業の `mapping_resolver` が `aggregate: [element1, element2, ...]` という
+   合算指示を受けられる仕様を追加 (現状は単一 element のみ)
+
+### PBR の分割補正
+
+`SharesOutstanding` の restated 形式が `SummaryOfBusinessResults` に
+存在しないため、株式分割をまたぐ期の PBR は filing-time 基準の生
+SharesOutstanding を使う (P4 / P3.5 verification_results §Step7)。
+yfinance.Ticker.splits の累積比率で除算する手法で補正可能だが、
+EPS と同様に「期中平均株式数」を考慮しない近似値になる。本実装では
+未対応。
+
+### 多銘柄スクリーニング
+
+「PER<15 かつ ROE>10%」のような条件で全上場銘柄から候補抽出する用途は
+plan §1 の非ゴール。需要が出てきたら別 Skill `japan-stock-screening`
+として切り出すのが筋。

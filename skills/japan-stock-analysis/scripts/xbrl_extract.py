@@ -291,14 +291,30 @@ def merge_paths(path_a: dict[str, dict], path_b: dict[str, dict]) -> dict[str, d
 # Public entry
 # ---------------------------------------------------------------------------
 
-def extract_from_zip(zip_path: Path, edinet_code: str, doc_id: str) -> ExtractResult:
-    """Parse an XBRL zip and return Path A / B / merged + unresolved items."""
+def extract_from_zip(
+    zip_path: Path,
+    edinet_code: str,
+    doc_id: str,
+    *,
+    extra_mappings: dict[str, dict] | None = None,
+) -> ExtractResult:
+    """Parse an XBRL zip and return Path A / B / merged + unresolved items.
+
+    ``extra_mappings`` is the ``mappings`` dict from cache/mappings/{sec_code}.json
+    (Phase P8 escalation). Each entry adds a fallback lookup applied AFTER
+    the Path A/B whitelist; entries whose element resolves successfully fill
+    in the corresponding item before the unresolved list is computed.
+    """
     xbrl_name = find_public_xbrl(zip_path)
     tree = load_xbrl_tree(zip_path, xbrl_name)
     nsmap = resolve_namespaces(tree, edinet_code)
     path_a = extract_path_a(tree, nsmap)
     path_b = extract_path_b(tree, nsmap)
     merged = merge_paths(path_a, path_b)
+
+    if extra_mappings:
+        _apply_extra_mappings(tree, nsmap, merged, extra_mappings)
+
     unresolved = [k for k in ITEM_KEYS if merged.get(k, {}).get("value") is None]
     return ExtractResult(
         doc_id=doc_id,
@@ -310,10 +326,58 @@ def extract_from_zip(zip_path: Path, edinet_code: str, doc_id: str) -> ExtractRe
     )
 
 
-def fetch_and_extract(api_key: str, doc_id: str, edinet_code: str) -> ExtractResult:
+def _apply_extra_mappings(
+    tree: etree._ElementTree,
+    nsmap: dict[str, str],
+    merged: dict[str, dict],
+    extra_mappings: dict[str, dict],
+) -> None:
+    """For each mapping with element 'prefix:local' and context, fill merged[item]
+    only if it's still None. Mutates ``merged`` in place."""
+    for item, spec in extra_mappings.items():
+        if item not in ITEM_KEYS:
+            continue
+        if merged.get(item, {}).get("value") is not None:
+            continue  # whitelist already resolved it
+        element = spec.get("element", "")
+        context = spec.get("context", CTX_DURATION)
+        if ":" not in element:
+            continue
+        prefix, local = element.split(":", 1)
+        value, unit, dec = get_fact(tree, nsmap, prefix, local, context)
+        if value is None:
+            continue
+        merged[item] = {
+            "value": value, "unit": unit, "decimals": dec,
+            "source": f"{element}@{context}",
+            "path": "mapping",
+            "rationale": spec.get("rationale", ""),
+        }
+    # FreeCF may now be computable if mapping filled OperatingCF/InvestingCF.
+    op = merged.get("OperatingCF", {}).get("value")
+    inv = merged.get("InvestingCF", {}).get("value")
+    if (
+        op is not None and inv is not None
+        and merged.get("FreeCF", {}).get("value") is None
+    ):
+        merged["FreeCF"] = {
+            "value": str(int(op) + int(inv)),
+            "unit": "JPY", "decimals": "-6",
+            "source": "OperatingCF + InvestingCF",
+            "path": "computed",
+        }
+
+
+def fetch_and_extract(
+    api_key: str,
+    doc_id: str,
+    edinet_code: str,
+    *,
+    extra_mappings: dict[str, dict] | None = None,
+) -> ExtractResult:
     """Download (or reuse cached) XBRL zip and extract in one call."""
     zip_path = download_xbrl_zip(api_key, doc_id)
-    return extract_from_zip(zip_path, edinet_code, doc_id)
+    return extract_from_zip(zip_path, edinet_code, doc_id, extra_mappings=extra_mappings)
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +403,56 @@ SUMMARY_CONTEXTS: list[tuple[int, str]] = [
     (3, "Prior3YearDuration"),
     (4, "Prior4YearDuration"),
 ]
+
+
+def inventory_candidates(
+    zip_path: Path,
+    edinet_code: str,
+    *,
+    contexts: tuple[str, ...] = (CTX_DURATION, CTX_INSTANT, CTX_FILING_DATE),
+) -> list[dict]:
+    """Return a list of (prefix, localname, context, sample_value) entries
+    found in the XBRL that are candidates for mapping escalation.
+
+    Filters out _Member breakdowns and segment-specific contexts so the
+    candidate list stays focused on the consolidated/standalone facts that
+    matter for the 9 line items. Used by scripts/mapping_resolver.py to
+    build the payload Claude reads during escalation.
+    """
+    xbrl_name = find_public_xbrl(zip_path)
+    tree = load_xbrl_tree(zip_path, xbrl_name)
+    nsmap = resolve_namespaces(tree, edinet_code)
+    uri_to_prefix = {uri: prefix for prefix, uri in nsmap.items()}
+    issuer_uri = nsmap.get("ISSUER")
+
+    results: dict[tuple[str, str, str], dict] = {}
+    for el in tree.getroot().iter():
+        tag = el.tag
+        if not isinstance(tag, str) or not tag.startswith("{"):
+            continue
+        ctx = el.get("contextRef")
+        if ctx not in contexts:
+            continue
+        uri, _, local = tag[1:].partition("}")
+        prefix = uri_to_prefix.get(uri, "?")
+        # Display ISSUER alias for issuer-specific namespaces so the payload
+        # stays company-agnostic (matches what extra_mappings will accept).
+        if issuer_uri and uri == issuer_uri:
+            prefix = "ISSUER"
+        key = (prefix, local, ctx)
+        if key in results:
+            continue
+        text = (el.text or "").strip()
+        if not text:
+            continue
+        results[key] = {
+            "element": f"{prefix}:{local}",
+            "context": ctx,
+            "unit": el.get("unitRef"),
+            "decimals": el.get("decimals"),
+            "sample_value": text[:80],
+        }
+    return sorted(results.values(), key=lambda r: (r["context"], r["element"]))
 
 
 def extract_restated_eps_from_zip(

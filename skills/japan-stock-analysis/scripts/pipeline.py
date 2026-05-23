@@ -43,9 +43,11 @@ from scripts.doc_list import (
 from scripts.cache_admin import clear_sec_code
 from scripts.html_report import render_report
 from scripts.json_export import write_data_json
+from scripts.mapping_resolver import build_escalation_payload, load_mapping
 from scripts.metrics import build_metrics, save_metrics
 from scripts.split_adjust import resolve_split_adjust
 from scripts.timeseries import build_timeseries, save_timeseries
+from scripts.xbrl_extract import download_xbrl_zip
 
 
 def _emit(payload: dict) -> int:
@@ -76,7 +78,47 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
             ),
         }
 
-    ts_df = build_timeseries(sec_code, api_key, limit=args.limit)
+    # Load any previously-saved Phase-P8 LLM mapping; pass to xbrl_extract.
+    mapping_cached = load_mapping(sec_code)
+    extra_mappings = mapping_cached.get("mappings") if mapping_cached else None
+    # Items the LLM judged as "intentionally unresolvable" (e.g. bank CF
+    # totals that the XBRL simply does not expose as standalone elements).
+    # These are accepted as NaN downstream rather than re-triggering
+    # escalation. See SKILL.md §6 for the "intentionally unresolved" semantics.
+    accepted_unresolved: set[str] = (
+        set(mapping_cached.get("unresolved", [])) if mapping_cached else set()
+    )
+
+    ts_df, unresolved = build_timeseries(
+        sec_code, api_key, limit=args.limit, extra_mappings=extra_mappings,
+    )
+    # Filter out items the cached mapping explicitly accepts as unresolvable.
+    unresolved = [u for u in unresolved if u not in accepted_unresolved]
+
+    # If items remain unresolved AFTER whitelist + cached mapping, surface a
+    # needs_mapping response so SKILL.md §6 can drive an LLM escalation.
+    if unresolved:
+        latest_doc = docs[-1]
+        zip_path = download_xbrl_zip(api_key, latest_doc.doc_id)
+        payload_path = build_escalation_payload(
+            sec_code, zip_path, latest_doc.edinet_code, unresolved,
+        )
+        return {
+            "sec_code": sec_code,
+            "status": "needs_mapping",
+            "unresolved": unresolved,
+            "candidates_payload": str(payload_path),
+            "knowledge_path": str(paths.SKILL_ROOT / "docs" / "xbrl_variation_knowledge.md"),
+            "suggested_command": (
+                "python3 ${CLAUDE_SKILL_DIR}/scripts/mapping_resolver.py save "
+                f"--sec-code {sec_code} --mapping-json <claude-built-mapping.json>"
+            ),
+            "rerun_after_save": (
+                "python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze "
+                f"--sec-code {sec_code}"
+            ),
+        }
+
     ts_path = save_timeseries(sec_code, ts_df)
 
     # Resolve restated-EPS mapping from the latest annual report. Cache key
@@ -98,12 +140,26 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
     )
     metrics_path = save_metrics(sec_code, metrics_df)
 
+    # If we used an LLM mapping, surface it loudly in warnings so the report
+    # reader knows AI judgement was involved.
+    if mapping_cached and mapping_cached.get("resolved_by") == "llm":
+        warnings.append(
+            f"PER/PBR rely on LLM-judged XBRL mapping (cache/mappings/{sec_code}.json). "
+            "Verify rationale before relying on the figures."
+        )
+    if accepted_unresolved:
+        warnings.append(
+            f"Mapping intentionally leaves {sorted(accepted_unresolved)} unresolved; "
+            "those fields are emitted as NaN."
+        )
+
     return {
         "sec_code": sec_code,
         "fiscal_years": [str(d) for d in ts_df.index],
         "timeseries_csv": str(ts_path),
         "metrics_csv": str(metrics_path),
         "split_adjust_source_doc_id": split_adjust.source_doc_id,
+        "mapping_resolved_by": (mapping_cached.get("resolved_by") if mapping_cached else None),
         "warnings": warnings,
         "_docs": docs,                 # internal use: surfaced into report footer
         "_split_adjust": split_adjust,  # internal use: passed to json_export
@@ -143,12 +199,15 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     per_code: list[dict] = []
     all_warnings: list[str] = []
     needs_bootstrap = False
+    needs_mapping = False
     try:
         for sc in args.sec_code:
             r = _analyze_one(sc, args, cfg.api_key)
             per_code.append(r)
             if r.get("status") == "needs_bootstrap":
                 needs_bootstrap = True
+            if r.get("status") == "needs_mapping":
+                needs_mapping = True
             for w in r.get("warnings", []) or []:
                 all_warnings.append(f"[{sc}] {w}")
     except CompanyMapMissingError as e:
@@ -161,6 +220,18 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             "status": "needs_bootstrap",
             "per_code": per_code,
             "suggested_command": "python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py fetch-documents --years 10",
+        })
+
+    if needs_mapping:
+        return _emit({
+            "status": "needs_mapping",
+            "per_code": per_code,
+            "instructions": (
+                "One or more sec_codes have XBRL elements outside the whitelist. "
+                "Follow SKILL.md §6 to read the candidates payload, judge the "
+                "mapping using docs/xbrl_variation_knowledge.md, save via "
+                "mapping_resolver save, then re-run analyze."
+            ),
         })
 
     # Per-code data_{sec_code}.json (CWD output; schema in docs/json_schema.md).
