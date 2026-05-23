@@ -6,3 +6,7 @@ pre-research/edinet/data/
 docs/edinet/*.pdf
 docs/edinet/*.xlsx
 docs/edinet/*.txt
+
+# Local manual testing area (Skill copy + history.md + ad-hoc artifacts).
+# Issues found during manual testing are recorded under bugs/ or enhancements/.
+manual_test/
