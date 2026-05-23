@@ -108,13 +108,16 @@ ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py anal
 # 一気通貫（過去10年・約2,500 API リクエスト。1秒/req で約40分）
 ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py init
 
-# 段階実行（EDINET無料枠100req/日の縛り対応）
+# 段階実行（途中中断や再開を見越したい場合）
 ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py refresh-company-map
-${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py fetch-documents --years 10 --chunk 0/25
-# --chunk 1/25, 2/25, ... と分割して 25 回（25 日に分けて）
+${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py fetch-documents --years 10 --chunk 0/10
+# --chunk 1/10, 2/10, ... と分割実行可能。各 chunk は独立に再実行可（既存ファイルはスキップ）
 ```
 
 bootstrap は時間がかかるため、**実行前にユーザーに必ず確認**する。
+
+EDINET API のレート制限は公式に明示されていない（pre-research 検証では 1秒間隔で安定動作）。
+429 が返ったら内部リトライ（指数バックオフ、最大3回）で対応する。
 
 ### 4.4 キャッシュ操作
 
@@ -161,13 +164,15 @@ ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/cache_admin.py c
 2. 小さい場合（数〜数十）→ **直近の追加 bootstrap が必要**。`bootstrap fetch-documents --years <推奨>` を実行
 3. ユーザーが「直近1〜3年だけ見たい」場合は `pipeline analyze --sec-code <code> --years 1` のように `--years` を小さく指定する選択肢を提示
 
-### 5.3 EDINET API レート制限・ネットワーク失敗
+### 5.3 EDINET API エラー（429・5xx・ネットワーク失敗）
 
 bootstrap や XBRL ダウンロード時に内部で **指数バックオフリトライ（最大3回）** が走る。それでも失敗した場合:
 
 - `bootstrap fetch-documents` の `--max-errors N` で許容失敗数を上げる、または `--chunk K/M` で範囲を絞る
-- 翌日まで待つ（無料枠リセット）
+- 429 が連続するならアクセス間隔を空けて再実行（`--sleep 2.0` 等）
 - ネットワーク障害なら `${CLAUDE_SKILL_DIR}/scripts/cache_admin.py info` で `secret.ok` が真であることを確認してから再実行
+
+EDINET API の明示的なレート上限は公式に未公開（pre-research 検証時の野良情報では 3-5 秒間隔推奨。本実装は 1 秒間隔がデフォルト）。
 
 ### 5.4 yfinance 失敗
 
@@ -293,5 +298,5 @@ needs_mapping は再発しない。warnings に
 - **5年超の期間**: restated EPS が無いため PER は NaN + warning
 - **会計基準切替期**: 同一銘柄の年度間で IFRS↔JGAAP が変わると数値が連続しない可能性あり
 - **月次決算 (4/5/6月決算)**: FY ラベルが1年ズレる可能性あり（多くの3月/12月決算では問題なし）
-- **EDINET 無料枠 100 req/日**: bootstrap 初回は数日に分けて実行する必要あり
+- **EDINET API レート制限**: 公式仕様書に上限の明記なし。本実装は 1秒間隔がデフォルトで pre-research にて安定動作実証済み。429 リトライ機構あり
 - **業種固有マッピングは初回 AI 介入が必要**: 銀行・保険等の業種は §6 のエスカレーションを経て `cache/mappings/{sec_code}.json` を作成、以降はキャッシュヒット

@@ -10,8 +10,11 @@ Subcommands:
     fetch-documents --years N [--chunk K/M] [--sleep S]
         Pull documents.json for every weekday in the past N years.
         --chunk K/M runs only the K-th of M equal-sized slices (0-indexed)
-        so that a 2,500-request 10-year sweep can be spread across days to
-        stay under the EDINET 100-req/day free quota.
+        so that a long sweep (e.g. 2,500-request 10-year scan ~40 min at
+        1s sleep) can be spread out, paused, or resumed. EDINET API has
+        no documented hard rate limit; 1-second spacing has been
+        pre-research-validated as stable. 429/5xx errors are retried
+        internally with exponential backoff.
     refresh-company-map
         Re-download the EDINET company-master ZIP and rebuild company_map.csv.
     init [--years N]

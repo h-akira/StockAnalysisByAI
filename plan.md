@@ -253,7 +253,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py init
 - **過去N年分の全平日**を対象（Sat/Sun は EDINET が 404 を返すのでスキップ）
 - pre-research Step2 の `build_scan_dates` は **単一会社・単一決算月用**の窓絞り込みであり、bootstrap の「全社×全書類タイプを一括取得」用途には合わない（年次報告書しか狙わない設計だった）。bootstrap では四半期/半期報告書・有報訂正・大量保有報告書なども将来扱う余地を残し、シンプルに全平日を走査する
 - 過去10年分 → 概算 2,500 API呼び出し（平日 ≒ 250日/年 × 10年。1秒/req で約40分）
-- EDINET無料枠の1日100req制限を踏まえ、初回は数日に分けて実行する設計（chunk指定で部分実行可能）
+- EDINET API は公式仕様書・公式ガイドのいずれにもレート制限の数値記載なし（pre-research [edinet_api_overview.md](pre-research/edinet/edinet_api_overview.md) §レート制限）。本検証では **1秒間隔で安定動作**を実証済み。chunk 分割は「サーバ負荷を意識した段階実行」と「中断/再開」のために提供（金銭コストや明示上限のためではない）
 - 過去日付の documents_index は不変なので、二度目以降は cache/documents/{date}.json が存在すればスキップ（差分取得）
 
 ### 3.6 キャッシュポリシー
@@ -501,7 +501,7 @@ AIエスカレーションの実装は **Phase P8（SKILL.md整備）** で組�
 4. JSONスキーマの確定（PhaseP5で詰める）
 5. AIエスカレーション時のClaudeへの渡し方（pipeline側で「未解決要素一覧 + ナレッジ」を標準出力に吐いてSKILL.mdの手順に従いClaudeが解決するフロー、で確定するか）
 6. 株価チャートの時間軸切替UI方針（タブ切替 vs Plotly range selector、P10で詰める）
-7. bootstrap の現実的なスキャン日数（10年で約2,500リクエスト、EDINET無料枠100req/日との折り合い → 25日分割 or レート緩和申請）
+7. bootstrap の現実的なスキャン時間（10年×全平日 ≒ 2,500 req × 1秒間隔 ≒ 42分。明示的なレート上限は公式に記載なし。中断したい場合 chunk K/M で部分実行可能）
 
 ---
 
