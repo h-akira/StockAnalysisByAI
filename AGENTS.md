@@ -42,8 +42,8 @@ FinanceSource/
 │   └── 001_*.md, 002_*.md, ...
 ├── references/                # 外部参照資料の置き場（設計ドキュメントではない）
 │   └── edinet/                # EDINET 公式仕様書 ESE140206.pdf 等（gitignore 済）
-├── tmp/                       # 今後見返すかもしれない作業ファイル（README 参照）
-├── old/                       # 説明済みや古い認識のアーカイブ（README 参照）
+├── tmp/                       # 今後見返すかもしれない作業ファイル（tmp/README.md 参照）
+├── old/                       # 説明済みや古い認識のアーカイブ（old/README.md 参照）
 └── manual_test/               # 手動テスト用 (Skill コピー、history.md 等。gitignore 済)
 ```
 
