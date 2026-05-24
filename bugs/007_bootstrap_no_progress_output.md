@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -68,7 +68,16 @@ pre-research/edinet/step2_doc_list.py L204-205 と同じパターン。
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (stderr flush 追加) を採用。実装確認で既存コードに 20 件ごとの stderr 出力はあったが `flush()` がなく、かつ最終イテレーションでの出力 (`i == len(target_dates)`) が無かったため両方修正。
+
+変更:
+- [skills/japan-stock-analysis/scripts/bootstrap.py](../skills/japan-stock-analysis/scripts/bootstrap.py) `cmd_fetch_documents`
+  - 進捗出力条件を `i % 20 == 0` → `i % 20 == 0 or i == len(target_dates)` に変更
+  - 進捗出力直後に `sys.stderr.flush()` を追加
+- [skills/japan-stock-analysis/tests/test_bootstrap.py](../skills/japan-stock-analysis/tests/test_bootstrap.py)
+  - `test_cmd_fetch_documents_emits_final_progress_line` を追加 (5 件で終端 `[5/5]` が出ることを assert)
+
+案2 (進捗ファイル) は未実装。案1 だけで実機の bootstrap 中も進捗が見えるようになるはず (Claude Code の Bash tool が stderr をどう扱うかは実機で要検証)。
 
 ## 関連
 

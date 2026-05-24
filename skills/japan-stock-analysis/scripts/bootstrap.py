@@ -291,11 +291,15 @@ def cmd_fetch_documents(args: argparse.Namespace) -> int:
         # Politeness: only sleep when we actually called the API (skipped = cache hit).
         if result != "skipped":
             time.sleep(args.sleep)
-        if i % 20 == 0:
+        # BUG-007: emit progress every 20 dates AND on the final iteration.
+        # Explicit flush is required because subprocess pipes / Claude Code
+        # Bash tool may buffer stderr until the process exits otherwise.
+        if i % 20 == 0 or i == len(target_dates):
             sys.stderr.write(
                 f"  [{i}/{len(target_dates)}] fetched={counters['fetched']} "
                 f"skipped={counters['skipped']} errors={counters['errors']}\n"
             )
+            sys.stderr.flush()
 
     _emit({
         "status": "success",

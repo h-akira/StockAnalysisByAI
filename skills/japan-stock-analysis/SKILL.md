@@ -2,10 +2,18 @@
 name: japan-stock-analysis
 description: 日本株（4桁証券コード指定）の財務三表・指標・バリュエーション推移を EDINET と yfinance から取得し、HTML レポートを生成する。1〜数社（〜10社）の個別分析向け。多銘柄スクリーニングは対象外。
 when_to_use: ユーザーが日本の上場企業（4桁証券コード）の財務分析・PER/PBR/ROE 等のバリュエーション推移・複数社比較を依頼したとき。「7203を分析して」「トヨタとソニーを比較」「6758の最近の財務を見たい」等のリクエスト。
-allowed-tools: Bash(python3 *) Bash(test *) Bash(cd *) Read
+allowed-tools: Bash(python3 *) Bash(test *) Read
 ---
 
+USER_CWD: !`pwd`
+
 # japan-stock-analysis
+
+> **重要**: 上記 `USER_CWD` 行は SKILL.md ロード時に動的展開されるユーザーの起動時 CWD。
+> 以降の analyze / mapping_resolver 等の Bash 呼び出しでは **必ず `--output-dir <USER_CWD の実値>` を明示する**こと。
+> 例: USER_CWD が `/Users/foo/work/proj` であれば `--output-dir /Users/foo/work/proj` を渡す。
+> これにより成果物 (`report_*.html` / `data_*.json` / `mapping_escalation_*.json`) が
+> Skill 配下ではなくユーザーの作業ディレクトリに確実に落ちる ([BUG-001](../../bugs/001_output_lands_in_skill_dir_not_cwd.md))。
 
 ## 1. 目的と前提
 
@@ -53,12 +61,11 @@ test -f ${CLAUDE_SKILL_DIR}/secret.json && echo OK || echo "MISSING"
 
 ### 3.2 venv と依存
 
-初回のみ:
+初回のみ (cd しない・全パス絶対化。BUG-001 対策):
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}
-python3 -m venv env
-env/bin/pip install -r requirements.txt
+python3 -m venv ${CLAUDE_SKILL_DIR}/env
+${CLAUDE_SKILL_DIR}/env/bin/pip install -r ${CLAUDE_SKILL_DIR}/requirements.txt
 ```
 
 以降は `${CLAUDE_SKILL_DIR}/env/bin/python3` を Python 実行に使う（システム Python だと依存が見つからない）。
@@ -75,20 +82,28 @@ ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/cache_admin.py i
 
 ### 4.1 基本フロー
 
+`--output-dir <USER_CWD>` (冒頭の USER_CWD 実値) を必ず明示する:
+
 ```bash
-${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze --sec-code <code>
+${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze \
+  --sec-code <code> \
+  --output-dir <USER_CWD>
 ```
 
 複数銘柄比較:
 ```bash
-${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze --sec-code <code1> <code2>
+${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze \
+  --sec-code <code1> <code2> \
+  --output-dir <USER_CWD>
 ```
 
 主要オプション:
+- `--output-dir <path>`: 成果物の出力先（必須相当 — 上記 USER_CWD を渡す）
 - `--years N`: bootstrap 完備チェックの対象年数（default 10）
 - `--no-yfinance`: 株価フェッチをスキップ（PER/PBR が NaN になる）
 - `--force-refresh`: 該当銘柄の派生キャッシュ（derived / prices / split-adjust）を破棄して再計算
-- `--output-dir <path>`: 成果物を CWD 以外に出したい場合の上書き
+
+`--output-dir` を省略した場合は実行時の CWD にフォールバックするが、CWD が Skill 配下を指していると analyze は `status: "error"` で停止する（BUG-001 防御）。
 
 ### 4.2 標準出力 JSON のステータス分岐
 
@@ -228,7 +243,9 @@ EDINET API の明示的なレート上限は公式に未公開（pre-research �
 
 5. **再実行**:
    ```bash
-   ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze --sec-code 8306
+   ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze \
+     --sec-code 8306 \
+     --output-dir <USER_CWD>
    ```
    2回目以降は `cache/mappings/8306.json` がヒットして AI 介入なしで分析が走る。
 

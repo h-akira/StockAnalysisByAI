@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -54,7 +54,14 @@ ENH-002 (JGAAP EPS fallback) 実装と同時に対応するのが効率的。
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+ENH-002 と同タイミングで案1 (空・部分欠落の区別) を採用。`scripts/pipeline.py` ではなく `scripts/metrics.py:build_metrics` の warning 生成側で分岐するように実装した (warning がそこに集約されているため)。
+
+変更:
+- [skills/japan-stock-analysis/scripts/metrics.py](../skills/japan-stock-analysis/scripts/metrics.py) `build_metrics`
+  - `split_adjust.restated_eps` が空 → 「restated EPS が一切取れない、PER 全期 NaN、BUG-002 系の可能性」と明示
+  - 一部欠落のみ → 従来の「5 年窓外」warning を継続
+- [skills/japan-stock-analysis/tests/test_split_adjust.py](../skills/japan-stock-analysis/tests/test_split_adjust.py)
+  - `test_metrics_warns_when_restated_eps_completely_empty` を追加 (誤メッセージ抑制を assert)
 
 ## 関連
 

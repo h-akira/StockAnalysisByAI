@@ -246,6 +246,107 @@ def test_analyze_unknown_sec_code(monkeypatch, tmp_path) -> None:
     assert "9999" in body["reason"]
 
 
+def test_analyze_does_not_reescalate_mapped_items(monkeypatch, tmp_path) -> None:
+    """BUG-005: items with an explicit mapping entry must not re-trigger
+    needs_mapping, even if some periods fail to resolve them."""
+    from scripts import mapping_resolver, timeseries
+
+    _stub_paths(monkeypatch, tmp_path)
+    _seed_documents(tmp_path)
+    _stub_xbrl_download(monkeypatch)
+    _stub_yfinance(monkeypatch)
+
+    # Seed a mapping cache claiming SharesOutstanding is mapped (even though
+    # the stub timeseries below will still report it as unresolved). The
+    # pipeline must NOT escalate because the user has already provided an
+    # explicit mapping entry.
+    mapping_resolver.save_mapping("7203", {
+        "mappings": {
+            "SharesOutstanding": {
+                "element": "jpcrp_cor:Whatever",
+                "context": "FilingDateInstant",
+                "rationale": "test",
+            },
+        },
+        "unresolved": [],
+    })
+
+    # Force build_timeseries to claim SharesOutstanding is unresolved (the
+    # real fixture resolves it, so we need a stub for this test).
+    real_build = timeseries.build_timeseries
+
+    def fake_build(sec_code, api_key, **kw):
+        df, _unresolved, nan_periods = real_build(sec_code, api_key, **kw)
+        return df, ["SharesOutstanding"], nan_periods
+
+    monkeypatch.setattr("scripts.pipeline.build_timeseries", fake_build)
+
+    rc, body = _run_analyze(["analyze", "--sec-code", "7203", "--years", "1"])
+    assert rc == 0, body
+    assert body["status"] == "success", body
+
+
+def test_analyze_warns_when_mapped_item_nan_for_some_periods(monkeypatch, tmp_path) -> None:
+    """BUG-006: when an item has a mapping entry but resolves to None in some
+    periods (taxonomy drift), a per-period warning should appear so the user
+    can tell that case apart from blanket mapping failure (BUG-002 class)."""
+    from scripts import mapping_resolver, timeseries
+
+    _stub_paths(monkeypatch, tmp_path)
+    _seed_documents(tmp_path)
+    _stub_xbrl_download(monkeypatch)
+    _stub_yfinance(monkeypatch)
+
+    # Mapping cache: SharesOutstanding is declared as mapped.
+    mapping_resolver.save_mapping("7203", {
+        "mappings": {
+            "SharesOutstanding": {
+                "element": "jpcrp_cor:Whatever",
+                "context": "FilingDateInstant",
+                "rationale": "test",
+            },
+        },
+        "unresolved": [],
+    })
+
+    # Force build_timeseries to return rows where SharesOutstanding is None.
+    real_build = timeseries.build_timeseries
+
+    def fake_build(sec_code, api_key, *, tracked_keys=None, **kw):
+        df, _u, _n = real_build(
+            sec_code, api_key, tracked_keys=tracked_keys, **kw
+        )
+        df["SharesOutstanding"] = None
+        # Simulate that all rows are NaN for SharesOutstanding.
+        nan_periods = {"SharesOutstanding": [str(p) for p in df.index]}
+        return df, [], nan_periods
+
+    monkeypatch.setattr("scripts.pipeline.build_timeseries", fake_build)
+
+    rc, body = _run_analyze(["analyze", "--sec-code", "7203", "--years", "1"])
+    assert rc == 0, body
+    warnings = body["warnings"]
+    matching = [w for w in warnings if "SharesOutstanding is NaN" in w]
+    assert matching, f"expected per-period NaN warning, got {warnings}"
+    assert "taxonomy may have changed" in matching[0]
+
+
+def test_analyze_refuses_output_dir_inside_skill_root(monkeypatch, tmp_path) -> None:
+    """BUG-001 防御: --output-dir が SKILL_ROOT 配下なら error で停止する。"""
+    _stub_paths(monkeypatch, tmp_path)
+    _seed_documents(tmp_path)
+    # Pick an arbitrary subdir under the real SKILL_ROOT (any path works since
+    # the sanity check resolves before mkdir-ing files).
+    bad_dir = paths.SKILL_ROOT / "cache"
+    rc, body = _run_analyze([
+        "analyze", "--sec-code", "7203", "--years", "1",
+        "--output-dir", str(bad_dir),
+    ])
+    assert rc != 0
+    assert body["status"] == "error"
+    assert "Skill directory" in body["reason"]
+
+
 def test_analyze_force_refresh_clears_per_sec_caches_before_run(monkeypatch, tmp_path) -> None:
     out_dir = _stub_paths(monkeypatch, tmp_path)
     _seed_documents(tmp_path)

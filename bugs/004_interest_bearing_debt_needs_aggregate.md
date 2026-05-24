@@ -70,7 +70,7 @@ mapping の `extra_mappings` が「1 項目 = 1 要素」しか扱えないた�
 
 ## 関連
 
-- 解決 enhancement (将来作成予定): `ENH-XXX_aggregate_mappings.md`
+- 解決 enhancement: [ENH-003](../enhancements/003_aggregate_mappings.md) (起票済、実装未着手)
 - 関連: [README §B extra_mappings の単一要素縛り](../skills/japan-stock-analysis/README.md)
 - 関連: [docs/p9_smoke_results.md 改善余地2](../skills/japan-stock-analysis/docs/p9_smoke_results.md)
 - 観測: P9 で 4502 武田、manual_test で 9531 東京ガス

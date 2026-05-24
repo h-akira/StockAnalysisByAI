@@ -32,7 +32,7 @@ treat them as NaN and warn the user, per init_plan.md §4.5 / pre-research Step 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,6 +51,10 @@ class SplitAdjustResult:
     source_doc_id: str
     source_period_end: str
     restated_eps: dict[str, float]   # ISO date string -> EPS
+    eps_source: dict[str, str] = field(default_factory=dict)
+    # ISO date string -> EPS_SUMMARY_ELEMENTS tag. Records which variant
+    # (ifrs_basic / jgaap_basic / ifrs_diluted / jgaap_diluted) was actually
+    # used per period_end so warnings can flag non-Basic fallbacks (ENH-002).
 
     def get(self, period_end: str | pd.Timestamp) -> float | None:
         """Look up restated EPS for a period_end. Returns None if out of range."""
@@ -95,6 +99,18 @@ def _offsets_to_period_ends(
     return out
 
 
+def _offset_tags_to_period_ends(
+    latest_period_end: pd.Timestamp,
+    tags: dict[int, str],
+) -> dict[str, str]:
+    """Same as _offsets_to_period_ends but for the audit-source tag dict."""
+    out: dict[str, str] = {}
+    for offset, tag in tags.items():
+        pe = latest_period_end - pd.DateOffset(years=offset)
+        out[pe.date().isoformat()] = tag
+    return out
+
+
 def resolve_split_adjust(
     sec_code: str,
     api_key: str,
@@ -116,12 +132,14 @@ def resolve_split_adjust(
             source_doc_id=cached["source_doc_id"],
             source_period_end=cached["source_period_end"],
             restated_eps=cached["restated_eps"],
+            eps_source=cached.get("eps_source", {}),
         )
 
     zip_path = download_xbrl_zip(api_key, latest_doc_id)
-    offsets = extract_restated_eps_from_zip(zip_path, latest_edinet_code)
+    offsets, source_offsets = extract_restated_eps_from_zip(zip_path, latest_edinet_code)
     latest_pe_ts = pd.to_datetime(latest_period_end)
     restated = _offsets_to_period_ends(latest_pe_ts, offsets)
+    eps_source = _offset_tags_to_period_ends(latest_pe_ts, source_offsets)
 
     payload = {
         "sec_code": sec_code,
@@ -129,6 +147,7 @@ def resolve_split_adjust(
         "source_period_end": latest_period_end,
         "resolved_at": datetime.now(timezone.utc).isoformat(),
         "restated_eps": restated,
+        "eps_source": eps_source,
     }
     _save_cache(sec_code, payload)
     return SplitAdjustResult(
@@ -136,4 +155,5 @@ def resolve_split_adjust(
         source_doc_id=latest_doc_id,
         source_period_end=latest_period_end,
         restated_eps=restated,
+        eps_source=eps_source,
     )

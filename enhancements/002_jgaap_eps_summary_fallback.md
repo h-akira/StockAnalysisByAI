@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未着手
+完了（検証待ち）
 
 ## 起票日
 
@@ -140,7 +140,12 @@ warning 改善 (BUG-003) はロールバック不要 (本ロールバックで�
 
 ## 対応
 
-<!-- AI instruction: 完了後に追記するセクション。採用した実現案、または独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (4 候補フォールバック + audit field) を採用。同時解決の BUG-003 込みで実装。実装詳細は [BUG-002 §対応](../bugs/002_jgaap_per_always_nan.md) を参照。
+
+未実施 (本対応スコープ外、必要時に別途):
+- JGAAP fixture (9531 等) 同梱と固有 PASS テスト追加 — 今回は実機 mock ベース検証のみ
+- `data_*.json` v1.0 → v1.1 スキーマバンプの正式アナウンス (`eps_source` を per-period metrics に流す場合のスキーマ拡張)
+- 後始末: MUFG 8306 手動 mapping 簡素化、SharesOutstanding の JGAAP/IFRS 差異調査
 
 ## 関連
 

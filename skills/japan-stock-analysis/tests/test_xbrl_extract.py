@@ -131,16 +131,20 @@ def test_sony_interest_bearing_debt_uses_pattern2(sony_result) -> None:
 
 def test_restated_eps_extraction_for_sony() -> None:
     """The Step 7 expected restated EPS for Sony FY2022 is 162.71 (post-split)."""
-    offsets = xbrl_extract.extract_restated_eps_from_zip(SONY_FIXTURE, SONY_EDINET_CODE)
+    offsets, sources = xbrl_extract.extract_restated_eps_from_zip(SONY_FIXTURE, SONY_EDINET_CODE)
     # 0 = latest (FY2024), 2 = 2 years back (FY2022).
     assert offsets[0] == pytest.approx(188.71)
     assert offsets[2] == pytest.approx(162.71)
+    # Sony is IFRS — every offset should be tagged as ifrs_basic.
+    assert all(tag == "ifrs_basic" for tag in sources.values())
 
 
 def test_restated_eps_extraction_for_toyota() -> None:
     """Toyota latest report exposes 5 fiscal years of post-split EPS."""
-    offsets = xbrl_extract.extract_restated_eps_from_zip(TOYOTA_FIXTURE, TOYOTA_EDINET_CODE)
+    offsets, sources = xbrl_extract.extract_restated_eps_from_zip(TOYOTA_FIXTURE, TOYOTA_EDINET_CODE)
     # Latest period EPS matches the raw figure (no split in window).
     assert offsets[0] == pytest.approx(359.56)
     # At least 3 years of history should be present.
     assert len(offsets) >= 3
+    # Toyota is IFRS — ifrs_basic should be used throughout.
+    assert sources[0] == "ifrs_basic"

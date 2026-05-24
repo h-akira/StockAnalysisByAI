@@ -54,12 +54,18 @@ def build_timeseries(
     *,
     limit: int | None = None,
     extra_mappings: dict[str, dict] | None = None,
-) -> tuple[pd.DataFrame, list[str]]:
+    tracked_keys: set[str] | None = None,
+) -> tuple[pd.DataFrame, list[str], dict[str, list[str]]]:
     """Build a multi-year DataFrame for one company.
 
-    Returns (df, union_unresolved_items). ``union_unresolved_items`` aggregates
-    unresolved item names across every year processed, so the caller can
-    trigger escalation if the whitelist + extra_mappings still leave gaps.
+    Returns ``(df, union_unresolved_items, nan_periods_by_item)``:
+      - ``df``: indexed by period_end (datetime), columns from ITEM_COLUMNS
+      - ``union_unresolved_items``: sorted list of items still unresolved in
+        ANY year (caller decides whether this triggers escalation)
+      - ``nan_periods_by_item``: ``{item: [period_end_iso, ...]}`` listing the
+        periods where each ``tracked_keys`` item came back as None despite a
+        mapping being expected. Used by callers to emit BUG-006 warnings.
+        Empty dict if ``tracked_keys`` is None or no NaN was observed.
 
     ``limit`` caps the number of filings processed (newest last, oldest first
     is the natural CSV order from doc_list); useful for incremental testing.
@@ -75,13 +81,19 @@ def build_timeseries(
 
     rows: list[dict] = []
     unresolved_union: set[str] = set()
+    nan_periods: dict[str, list[str]] = {}
+    track = tracked_keys or set()
     for doc in docs:
         items, unresolved = extract_row(api_key, doc, extra_mappings=extra_mappings)
         rows.append({"period_end": doc.period_end, **items})
         unresolved_union.update(unresolved)
+        if track:
+            for key in track:
+                if items.get(key) is None:
+                    nan_periods.setdefault(key, []).append(str(doc.period_end))
 
     df = pd.DataFrame(rows).set_index("period_end").sort_index()
-    return df, sorted(unresolved_union)
+    return df, sorted(unresolved_union), nan_periods
 
 
 def save_timeseries(sec_code: str, df: pd.DataFrame) -> Path:

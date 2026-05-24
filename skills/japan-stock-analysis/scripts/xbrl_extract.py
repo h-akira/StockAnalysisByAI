@@ -391,7 +391,16 @@ def fetch_and_extract(
 # share count at filing time. Reading them gives us a per-fiscal-year mapping
 # we can use to recompute PER without the basis mismatch yfinance introduces.
 
-EPS_SUMMARY_ELEMENT = "BasicEarningsLossPerShareIFRSSummaryOfBusinessResults"
+# Fallback order for restated EPS in SummaryOfBusinessResults.
+# IFRS Basic > JGAAP Basic > IFRS Diluted > JGAAP Diluted.
+# The (element, tag) pair lets callers record which variant was actually used
+# via SplitAdjustResult.eps_source for audit. See BUG-002 / ENH-002.
+EPS_SUMMARY_ELEMENTS: list[tuple[str, str]] = [
+    ("BasicEarningsLossPerShareIFRSSummaryOfBusinessResults", "ifrs_basic"),
+    ("BasicEarningsLossPerShareSummaryOfBusinessResults", "jgaap_basic"),
+    ("DilutedEarningsPerShareIFRSSummaryOfBusinessResults", "ifrs_diluted"),
+    ("DilutedEarningsPerShareSummaryOfBusinessResults", "jgaap_diluted"),
+]
 
 # (offset_from_latest, context_id). Latest report's CurrentYearDuration is
 # offset 0; Prior{N} walks back exactly N fiscal years. EDINET reports
@@ -458,21 +467,30 @@ def inventory_candidates(
 def extract_restated_eps_from_zip(
     zip_path: Path,
     edinet_code: str,
-) -> dict[int, float]:
-    """Return {offset_from_latest: eps} for every Prior*YearDuration found.
+) -> tuple[dict[int, float], dict[int, str]]:
+    """Return ({offset_from_latest: eps}, {offset_from_latest: source_tag}).
+
+    For each Prior*YearDuration context, probe EPS_SUMMARY_ELEMENTS in priority
+    order (IFRS Basic > JGAAP Basic > IFRS Diluted > JGAAP Diluted). The first
+    element that yields a value wins for that offset; the variant tag is
+    recorded in the second return dict for audit (see BUG-002 / ENH-002).
 
     Keys are integer offsets (0 = latest period, 1 = one year prior, …).
     Callers map offsets to fiscal year-end dates using the latest report's
     period_end. Returned values are in JPY/share (float).
-    Empty dict means no SummaryOfBusinessResults EPS was found.
+    Empty dicts mean no SummaryOfBusinessResults EPS was found at all.
     """
     xbrl_name = find_public_xbrl(zip_path)
     tree = load_xbrl_tree(zip_path, xbrl_name)
     nsmap = resolve_namespaces(tree, edinet_code)
     out: dict[int, float] = {}
+    sources: dict[int, str] = {}
     for offset, ctx in SUMMARY_CONTEXTS:
-        value, _unit, _dec = get_fact(tree, nsmap, "jpcrp_cor", EPS_SUMMARY_ELEMENT, ctx)
-        if value is None:
-            continue
-        out[offset] = float(value)
-    return out
+        for element, tag in EPS_SUMMARY_ELEMENTS:
+            value, _unit, _dec = get_fact(tree, nsmap, "jpcrp_cor", element, ctx)
+            if value is None:
+                continue
+            out[offset] = float(value)
+            sources[offset] = tag
+            break
+    return out, sources

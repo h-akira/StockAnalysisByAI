@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -59,7 +59,26 @@ IFRS / JGAAP を事前判定して別ロジックに分岐。確実だが indust
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+ENH-002 案1 (4 候補フォールバック + audit field) を採用。BUG-003 (warning 改善) も同タイミングで対応済み。
+
+変更:
+- [skills/japan-stock-analysis/scripts/xbrl_extract.py](../skills/japan-stock-analysis/scripts/xbrl_extract.py)
+  - 定数 `EPS_SUMMARY_ELEMENT` (単一文字列) を `EPS_SUMMARY_ELEMENTS` (4 候補 × audit tag のリスト) に置換
+  - `extract_restated_eps_from_zip` の戻り値を `(offsets, sources)` の 2-tuple に変更し、各 offset で採用された変種タグ (ifrs_basic / jgaap_basic / ifrs_diluted / jgaap_diluted) を返すように
+- [skills/japan-stock-analysis/scripts/split_adjust.py](../skills/japan-stock-analysis/scripts/split_adjust.py)
+  - `SplitAdjustResult` に `eps_source: dict[str, str]` フィールドを追加 (period_end → tag)
+  - cache JSON v1 に `eps_source` を追加 (後方互換 — 既存キャッシュは `cached.get("eps_source", {})` で空辞書フォールバック)
+  - `_offset_tags_to_period_ends` ヘルパを追加
+- [skills/japan-stock-analysis/scripts/metrics.py](../skills/japan-stock-analysis/scripts/metrics.py) `build_metrics`
+  - 非 IFRS-Basic fallback が使われた場合に warning を発行 (ENH-002)
+- [skills/japan-stock-analysis/tests/test_xbrl_extract.py](../skills/japan-stock-analysis/tests/test_xbrl_extract.py)
+  - 新シグネチャに合わせて Sony/Toyota の restated_eps テストを更新、ifrs_basic タグも assert
+- [skills/japan-stock-analysis/tests/test_split_adjust.py](../skills/japan-stock-analysis/tests/test_split_adjust.py)
+  - 既存 `test_resolve_rebuilds_when_source_doc_id_changes` の mock 戻り値を 2-tuple に修正
+  - `eps_source` が persist されることを assert
+  - BUG-002 / BUG-003 / ENH-002 の warning 改善を別途検証する 2 テスト追加
+
+JGAAP fixture (9531 等) は同梱せず実機 mock ベースで検証。実機で JGAAP 銘柄を analyze した際に PER が出ること・`eps_source` が `jgaap_basic` 等になることは別途確認推奨。
 
 ## 関連
 

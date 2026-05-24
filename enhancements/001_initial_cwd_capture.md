@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未着手
+完了（検証待ち）
 
 ## 起票日
 
@@ -167,7 +167,11 @@ Skill 起動時に `cache/.user_cwd` のようなファイルを生成し、以�
 
 ## 対応
 
-<!-- AI instruction: 完了後に追記するセクション。採用した実現案、または独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (三層防御) を採用。実装内容は [BUG-001 §対応](../bugs/001_output_lands_in_skill_dir_not_cwd.md) を参照。
+
+層1〜3 すべて実装、補助 (env var フォールバック) も実装済み。実装前の追加調査事項のうち「`!`pwd`` 出力タイミング」と「`CLAUDE_PROJECT_DIR` の Skill 文脈での可視性」は実機検証で確認することを推奨 (本対応では公式明記済の `!`pwd`` injection だけで完結する設計)。
+
+`mapping_resolver.py` の `--output-dir` 引数は今回未追加。`mapping_resolver save` は cache に書くだけで成果物を CWD に出さないため、pipeline 側の `build_escalation_payload(out_dir=paths.output_dir())` での明示渡しで足りる。`mapping_resolver` を CLI から単独実行して成果物を CWD に出すユースケースが将来出てきた場合のみ追加で対応。
 
 ## 関連
 

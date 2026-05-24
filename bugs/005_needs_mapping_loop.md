@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -61,7 +61,16 @@ mapping save 時に「適用すると最新期で取れるが古い期で取れ�
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (mapping に明示エントリのある項目は再エスカレーションしない) を採用。
+
+変更:
+- [skills/japan-stock-analysis/scripts/pipeline.py](../skills/japan-stock-analysis/scripts/pipeline.py) `_analyze_one`
+  - `mapped_keys` (= `mapping_cached["mappings"]` のキー集合) を計算
+  - `unresolved` フィルタ条件に `u not in mapped_keys` を追加
+- [skills/japan-stock-analysis/tests/test_pipeline.py](../skills/japan-stock-analysis/tests/test_pipeline.py)
+  - `test_analyze_does_not_reescalate_mapped_items` を追加 (mapping save 済の項目が一部期で取れなくても needs_mapping にならないことを assert)
+
+期間別 NaN の可視性は BUG-006 の warning 改善で別途担保 (こちらは pending)。
 
 ## 関連
 

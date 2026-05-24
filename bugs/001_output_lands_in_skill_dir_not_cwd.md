@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -59,7 +59,25 @@
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+ENH-001 案1 (三層防御) を採用。BUG-008 (gitignore 二重防御) も同タイミングで対応済み。
+
+変更:
+- [skills/japan-stock-analysis/SKILL.md](../skills/japan-stock-analysis/SKILL.md)
+  - 冒頭に `USER_CWD: !` の dynamic injection 行を追加し、後段の Bash 呼び出しで `--output-dir <USER_CWD>` を必ず明示するよう指示
+  - §3.2 から `cd ${CLAUDE_SKILL_DIR}` を撤廃し、venv セットアップを全パス絶対化
+  - §4.1 / §6.2 の analyze / 再実行コマンドに `--output-dir <USER_CWD>` を追加
+  - `allowed-tools` から `Bash(cd *)` を撤去
+- [skills/japan-stock-analysis/scripts/paths.py](../skills/japan-stock-analysis/scripts/paths.py) `output_dir()`
+  - `JAPAN_STOCK_OUTPUT_DIR` env var フォールバックを追加 (escape hatch)
+- [skills/japan-stock-analysis/scripts/pipeline.py](../skills/japan-stock-analysis/scripts/pipeline.py) `cmd_analyze`
+  - resolved output_dir が SKILL_ROOT 配下なら `status: "error"` で停止するサニティチェックを追加
+  - `build_escalation_payload` 呼び出しで `out_dir=paths.output_dir()` を明示
+- [skills/japan-stock-analysis/tests/test_paths.py](../skills/japan-stock-analysis/tests/test_paths.py)
+  - env var フォールバックのテスト 2 件追加
+- [skills/japan-stock-analysis/tests/test_pipeline.py](../skills/japan-stock-analysis/tests/test_pipeline.py)
+  - サニティチェック (SKILL_ROOT 配下出力拒否) のテストを追加
+
+ロールバックは ENH-001 §ロールバック手順を参照。
 
 ## 関連
 

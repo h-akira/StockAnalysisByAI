@@ -88,12 +88,24 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
     accepted_unresolved: set[str] = (
         set(mapping_cached.get("unresolved", [])) if mapping_cached else set()
     )
-
-    ts_df, unresolved = build_timeseries(
-        sec_code, api_key, limit=args.limit, extra_mappings=extra_mappings,
+    # BUG-005: items with an explicit mapping entry are considered "judged" —
+    # even if they fail to resolve in some older periods (taxonomy drift), we
+    # must NOT re-escalate. Period-specific NaN visibility is handled by
+    # BUG-006 warnings instead.
+    mapped_keys: set[str] = (
+        set((mapping_cached.get("mappings") or {}).keys()) if mapping_cached else set()
     )
-    # Filter out items the cached mapping explicitly accepts as unresolvable.
-    unresolved = [u for u in unresolved if u not in accepted_unresolved]
+
+    ts_df, unresolved, nan_periods = build_timeseries(
+        sec_code, api_key, limit=args.limit, extra_mappings=extra_mappings,
+        tracked_keys=mapped_keys,
+    )
+    # Filter out items the cached mapping explicitly accepts as unresolvable
+    # or has an explicit mapping entry for.
+    unresolved = [
+        u for u in unresolved
+        if u not in accepted_unresolved and u not in mapped_keys
+    ]
 
     # If items remain unresolved AFTER whitelist + cached mapping, surface a
     # needs_mapping response so SKILL.md §6 can drive an LLM escalation.
@@ -102,6 +114,7 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
         zip_path = download_xbrl_zip(api_key, latest_doc.doc_id)
         payload_path = build_escalation_payload(
             sec_code, zip_path, latest_doc.edinet_code, unresolved,
+            out_dir=paths.output_dir(),
         )
         return {
             "sec_code": sec_code,
@@ -152,6 +165,14 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
             f"Mapping intentionally leaves {sorted(accepted_unresolved)} unresolved; "
             "those fields are emitted as NaN."
         )
+    # BUG-006: surface mapping-present-but-period-missing items so the user
+    # can tell taxonomy drift (some old years simply lack the element) apart
+    # from blanket mapping failure.
+    for item, periods in sorted(nan_periods.items()):
+        warnings.append(
+            f"{item} is NaN for {sorted(periods)} (mapping exists but the "
+            "XBRL element is missing in those periods — taxonomy may have changed)."
+        )
 
     return {
         "sec_code": sec_code,
@@ -173,6 +194,25 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         forced = Path(args.output_dir).resolve()
         forced.mkdir(parents=True, exist_ok=True)
         paths.output_dir = lambda: forced  # type: ignore[assignment]
+
+    # Sanity check: artifacts must never land under SKILL_ROOT. If cwd-pollution
+    # (BUG-001) or a stray --output-dir would route writes there, refuse early
+    # with a clear instruction rather than silently writing into the Skill dir.
+    resolved_out = paths.output_dir().resolve()
+    try:
+        resolved_out.relative_to(paths.SKILL_ROOT)
+    except ValueError:
+        pass  # outside SKILL_ROOT — OK
+    else:
+        return _emit({
+            "status": "error",
+            "reason": (
+                f"Refusing to write artifacts to {resolved_out}, which is inside the "
+                f"Skill directory ({paths.SKILL_ROOT}). "
+                "Pass --output-dir <user-cwd> explicitly, or invoke the command from "
+                "the intended output directory. See SKILL.md §3 for the USER_CWD pattern."
+            ),
+        })
 
     try:
         cfg = load_edinet_config()

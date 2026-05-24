@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -68,7 +68,20 @@ pipeline で warning に列挙:
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (期間別 NaN を追跡して warning 化) を採用。
+
+変更:
+- [skills/japan-stock-analysis/scripts/timeseries.py](../skills/japan-stock-analysis/scripts/timeseries.py) `build_timeseries`
+  - 新引数 `tracked_keys: set[str] | None` を追加 (pipeline 側で mapped_keys を渡す)
+  - 戻り値を `(df, unresolved_union, nan_periods_by_item)` の 3-tuple に変更 (後方互換性は破壊するが本リポジトリ内の呼び出しはすべて修正済み)
+- [skills/japan-stock-analysis/scripts/pipeline.py](../skills/japan-stock-analysis/scripts/pipeline.py) `_analyze_one`
+  - `build_timeseries(..., tracked_keys=mapped_keys)` で期間別 NaN を取得
+  - mapping ありで NaN な item / 期間ごとに warning を追加 (「taxonomy may have changed」を明示)
+- [skills/japan-stock-analysis/tests/test_pipeline.py](../skills/japan-stock-analysis/tests/test_pipeline.py)
+  - 既存 BUG-005 テストの `fake_build` を 3-tuple に修正
+  - `test_analyze_warns_when_mapped_item_nan_for_some_periods` を追加
+
+mapping JSON のスキーマ拡張 (案2) は対応不要 (案1 だけで透明性は担保できる)。
 
 ## 関連
 

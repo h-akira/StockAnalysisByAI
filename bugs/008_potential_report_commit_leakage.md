@@ -2,7 +2,7 @@
 
 ## ステータス
 
-未修正
+修正済み（検証待ち）
 
 ## 発見日
 
@@ -69,7 +69,18 @@ BUG-001 の修正で根本治療されるなら gitignore 追加は不要、と�
 
 ## 対応
 
-<!-- AI instruction: 修正完了後に追記するセクション。採用した修正案、または修正案にない独自対応の内容を記載する。変更したファイル・メソッドを列挙すること -->
+案1 (.gitignore 追加) を採用。
+
+変更:
+- [skills/japan-stock-analysis/.gitignore](../skills/japan-stock-analysis/.gitignore) に下記パターンを追加
+  ```
+  report_*.html
+  data_*.json
+  mapping_escalation_*.json
+  mapping_*.json
+  ```
+
+BUG-001 修正 (ENH-001 三層防御) と同タイミングで対応した二重防御。
 
 ## 関連
 

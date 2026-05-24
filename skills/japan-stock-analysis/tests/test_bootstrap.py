@@ -143,6 +143,36 @@ def test_fetch_documents_json_eventually_raises_on_persistent_429(monkeypatch, t
             bootstrap.fetch_documents_json("KEY", date(2026, 5, 22), max_retries=2, backoff_seconds=0)
 
 
+# ---------- cmd_fetch_documents progress output (BUG-007) ----------
+
+def test_cmd_fetch_documents_emits_final_progress_line(monkeypatch, tmp_path, capsys) -> None:
+    """BUG-007: progress must include the final iteration (not only multiples
+    of 20) and be flushed so callers see it before the process exits."""
+    _patch_cache_dir(monkeypatch, tmp_path)
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _: None)
+    monkeypatch.setattr(bootstrap, "build_weekdays", lambda years, today=None: [
+        date(2026, 5, i) for i in (1, 4, 5, 6, 7)
+    ])
+    monkeypatch.setattr(bootstrap, "load_edinet_config",
+                        lambda: bootstrap.load_edinet_config.__wrapped__()
+                        if hasattr(bootstrap.load_edinet_config, "__wrapped__")
+                        else type("C", (), {"api_key": "KEY"})())
+
+    fake_resp = MagicMock(status_code=200)
+    fake_resp.json.return_value = {"metadata": {"status": "200"}, "results": []}
+    with patch.object(bootstrap.requests, "get", return_value=fake_resp):
+        args = bootstrap.build_parser().parse_args([
+            "fetch-documents", "--years", "1", "--sleep", "0",
+        ])
+        rc = bootstrap.cmd_fetch_documents(args)
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    # Final iteration index = 5 (= len(target_dates)); ensure it appears even
+    # though it's not a multiple of 20.
+    assert "[5/5]" in captured.err
+
+
 # ---------- build_company_map ----------
 
 def test_build_company_map_filters_unlisted_rows() -> None:

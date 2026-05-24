@@ -15,3 +15,9 @@ __pycache__/
 
 # Test cache
 .pytest_cache/
+
+# Defense in depth: BUG-001 や手動操作で誤って Skill 配下に成果物が出ても commit されないように
+report_*.html
+data_*.json
+mapping_escalation_*.json
+mapping_*.json

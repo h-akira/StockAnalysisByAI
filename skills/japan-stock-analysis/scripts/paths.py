@@ -10,6 +10,7 @@ See init_plan.md §3.4 for the policy.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # scripts/ の親 = Skill ルート
@@ -30,13 +31,26 @@ TEMPLATES_DIR: Path = SKILL_ROOT / "templates"
 SECRET_PATH: Path = SKILL_ROOT / "secret.json"
 
 
+OUTPUT_DIR_ENV_VAR = "JAPAN_STOCK_OUTPUT_DIR"
+
+
 def output_dir() -> Path:
     """Return the artifact output directory.
 
+    Priority:
+      1. ``JAPAN_STOCK_OUTPUT_DIR`` env var (escape hatch; must be an existing dir)
+      2. ``Path.cwd()`` (last resort)
+
     Artifacts (HTML report, JSON data) are written to the user's CWD so that
     each project folder accumulates only its own reports. The Skill itself
-    must never write reports under SKILL_ROOT.
+    must never write reports under SKILL_ROOT — pipeline.py enforces this
+    via a sanity check on the resolved output directory.
     """
+    override = os.environ.get(OUTPUT_DIR_ENV_VAR)
+    if override:
+        p = Path(override)
+        if p.is_dir():
+            return p
     return Path.cwd()
 
 

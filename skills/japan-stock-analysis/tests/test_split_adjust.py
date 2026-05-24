@@ -134,7 +134,7 @@ def test_resolve_rebuilds_when_source_doc_id_changes(monkeypatch, tmp_path) -> N
     monkeypatch.setattr(split_adjust, "download_xbrl_zip", lambda *a, **kw: "fake.zip")
     monkeypatch.setattr(
         split_adjust, "extract_restated_eps_from_zip",
-        lambda *a, **kw: {0: 188.71, 2: 162.71},
+        lambda *a, **kw: ({0: 188.71, 2: 162.71}, {0: "ifrs_basic", 2: "ifrs_basic"}),
     )
 
     result = split_adjust.resolve_split_adjust(
@@ -147,6 +147,76 @@ def test_resolve_rebuilds_when_source_doc_id_changes(monkeypatch, tmp_path) -> N
     assert result.get("2023-03-31") == 162.71
     # Stale value must be gone.
     assert result.get("2024-03-31") is None
+    # Audit source tags should be persisted on the returned dataclass.
+    assert result.eps_source == {"2025-03-31": "ifrs_basic", "2023-03-31": "ifrs_basic"}
+
+
+# ---------- BUG-002 / BUG-003: warning shape when EPS fallback was used ----------
+
+def test_metrics_warns_when_restated_eps_completely_empty(monkeypatch, tmp_path) -> None:
+    """BUG-003: when restated_eps is empty (e.g. JGAAP probes all fail), warn
+    that PER will be NaN entirely — do NOT use the misleading '5-year window'
+    message."""
+    from scripts import metrics, stock_price
+
+    sec_code = "9999"
+    csv_path = tmp_path / f"timeseries_{sec_code}.csv"
+    pd.DataFrame({
+        "period_end": ["2024-03-31", "2025-03-31"],
+        "NetSales": [1e12, 1e12], "OperatingIncome": [1e11, 1e11],
+        "ProfitLoss": [1e11, 1e11], "TotalAssets": [5e12, 5e12],
+        "NetAssets": [2e12, 2e12], "InterestBearingDebt": [1e12, 1e12],
+        "EarningsPerShare": [100.0, 110.0], "SharesOutstanding": [1e9, 1e9],
+    }).to_csv(csv_path, index=False)
+    monkeypatch.setattr(metrics, "timeseries_csv_path", lambda sc: csv_path)
+    monkeypatch.setattr(
+        stock_price, "fetch_history",
+        lambda sc, **kw: pd.DataFrame(
+            {"Close": [1000.0]}, index=pd.to_datetime(["2025-03-31"])
+        ),
+    )
+
+    empty_sa = split_adjust.SplitAdjustResult(
+        sec_code=sec_code, source_doc_id="DOC", source_period_end="2025-03-31",
+        restated_eps={}, eps_source={},
+    )
+    _, warnings = metrics.build_metrics(sec_code, split_adjust=empty_sa)
+    assert any("no restated EPS at all" in w for w in warnings)
+    # Misleading "5-year window" must NOT appear when restated_eps is empty.
+    assert not any("5-year window" in w for w in warnings)
+
+
+def test_metrics_warns_when_non_ifrs_basic_fallback_used(monkeypatch, tmp_path) -> None:
+    """ENH-002: surface a warning when any period used a non-IFRS-Basic EPS."""
+    from scripts import metrics, stock_price
+
+    sec_code = "9999"
+    csv_path = tmp_path / f"timeseries_{sec_code}.csv"
+    pd.DataFrame({
+        "period_end": ["2024-03-31", "2025-03-31"],
+        "NetSales": [1e12, 1e12], "OperatingIncome": [1e11, 1e11],
+        "ProfitLoss": [1e11, 1e11], "TotalAssets": [5e12, 5e12],
+        "NetAssets": [2e12, 2e12], "InterestBearingDebt": [1e12, 1e12],
+        "EarningsPerShare": [100.0, 110.0], "SharesOutstanding": [1e9, 1e9],
+    }).to_csv(csv_path, index=False)
+    monkeypatch.setattr(metrics, "timeseries_csv_path", lambda sc: csv_path)
+    monkeypatch.setattr(
+        stock_price, "fetch_history",
+        lambda sc, **kw: pd.DataFrame(
+            {"Close": [1000.0, 1050.0]},
+            index=pd.to_datetime(["2024-03-31", "2025-03-31"]),
+        ),
+    )
+
+    sa = split_adjust.SplitAdjustResult(
+        sec_code=sec_code, source_doc_id="DOC", source_period_end="2025-03-31",
+        restated_eps={"2024-03-31": 95.0, "2025-03-31": 105.0},
+        eps_source={"2024-03-31": "jgaap_basic", "2025-03-31": "jgaap_basic"},
+    )
+    _, warnings = metrics.build_metrics(sec_code, split_adjust=sa)
+    fallback_warnings = [w for w in warnings if "non-IFRS-Basic" in w]
+    assert len(fallback_warnings) == 1
+    assert "jgaap_basic" in fallback_warnings[0]
 
 
 # ---------- regression: metrics.compute_metrics uses restated EPS for PER ----------

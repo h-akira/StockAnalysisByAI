@@ -15,6 +15,19 @@ def test_skill_root_contains_scripts() -> None:
     assert (paths.SKILL_ROOT / "scripts").is_dir()
 
 
+def test_output_dir_env_var_override(tmp_path, monkeypatch) -> None:
+    """JAPAN_STOCK_OUTPUT_DIR env var wins over CWD when it points to an existing dir."""
+    monkeypatch.setenv(paths.OUTPUT_DIR_ENV_VAR, str(tmp_path))
+    assert paths.output_dir() == tmp_path
+
+
+def test_output_dir_env_var_ignored_when_dir_missing(tmp_path, monkeypatch) -> None:
+    """Bogus override path falls back to Path.cwd() rather than crashing."""
+    missing = tmp_path / "does_not_exist"
+    monkeypatch.setenv(paths.OUTPUT_DIR_ENV_VAR, str(missing))
+    assert paths.output_dir() == Path.cwd()
+
+
 def test_cache_paths_under_skill_root() -> None:
     for p in (
         paths.CACHE_DIR,

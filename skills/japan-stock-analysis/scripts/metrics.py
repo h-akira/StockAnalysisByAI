@@ -107,12 +107,35 @@ def build_metrics(
     eps_for_per: pd.Series | None = None
     if split_adjust is not None:
         eps_for_per = _restated_eps_series(df, split_adjust)
-        missing = [pe.date().isoformat() for pe in df.index if split_adjust.get(pe) is None]
-        if missing:
+        # BUG-003: distinguish "restated_eps is entirely empty" from "only some
+        # periods fall outside the 5-year window". The former masks BUG-002-class
+        # issues (e.g. JGAAP banks where the IFRS element doesn't exist).
+        if not split_adjust.restated_eps:
             warnings.append(
-                "PER is NaN for periods outside the latest report's restated EPS coverage "
-                f"(5-year window): {missing}. PBR also retains the unfixed share-count basis "
-                "(see split_adjust caveat)."
+                "split_adjust returned no restated EPS at all. PER will be NaN for all periods. "
+                "Likely cause: the latest report's XBRL taxonomy lacks every element probed in "
+                "EPS_SUMMARY_ELEMENTS (IFRS / JGAAP, Basic / Diluted). See BUG-002 for context."
+            )
+        else:
+            missing = [pe.date().isoformat() for pe in df.index if split_adjust.get(pe) is None]
+            if missing:
+                warnings.append(
+                    "PER is NaN for periods outside the latest report's restated EPS coverage "
+                    f"(5-year window): {missing}. PBR also retains the unfixed share-count basis "
+                    "(see split_adjust caveat)."
+                )
+
+        # ENH-002: surface non-IFRS-Basic fallback usage so the reader knows
+        # which EPS variant fed PER. Diluted is ~slightly< Basic so PER will
+        # be ~slightly> the "true" Basic PER.
+        fallback_tags = sorted({
+            tag for tag in split_adjust.eps_source.values() if tag != "ifrs_basic"
+        })
+        if fallback_tags:
+            warnings.append(
+                f"split_adjust used non-IFRS-Basic EPS fallback for some periods: {fallback_tags}. "
+                "Verify PER values; Diluted variants in particular produce slightly higher PER "
+                "than Basic. See data_*.json metrics for the per-period eps_source."
             )
     else:
         warnings.append(
