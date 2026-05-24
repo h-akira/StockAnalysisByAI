@@ -3,9 +3,9 @@ pre-research/edinet/env/
 pre-research/edinet/data/
 
 # Official EDINET specs (re-downloadable from disclosure2dl.edinet-fsa.go.jp)
-docs/edinet/*.pdf
-docs/edinet/*.xlsx
-docs/edinet/*.txt
+references/edinet/*.pdf
+references/edinet/*.xlsx
+references/edinet/*.txt
 
 # Local manual testing area (Skill copy + history.md + ad-hoc artifacts).
 # Issues found during manual testing are recorded under bugs/ or enhancements/.

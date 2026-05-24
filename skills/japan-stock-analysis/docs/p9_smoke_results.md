@@ -1,7 +1,7 @@
 # P9 通し動作確認 結果
 
 実施日: 2026-05-23
-目的: plan.md §5 P9 の完了条件 (fresh環境で5銘柄の通し動作) を満たす。
+目的: init_plan.md §5 P9 の完了条件 (fresh環境で5銘柄の通し動作) を満たす。
 スコープ: cache 全削除 → bootstrap → 5 銘柄分析 → 比較レポートまで。
 
 ## 対象銘柄 (業種・会計基準で多様性を確保)
@@ -121,7 +121,7 @@ success、`report_7203_6758_8306_9432_4502.html` (4.9 MB) 生成。
 
 ## P9 完了条件の判定
 
-plan §5 P9 完了条件: 「fresh環境で通し動作（bootstrapから分析まで）、5銘柄（IFRS製造業＋日本基準＋銀行業含む）でレポート生成成功」
+init_plan.md §5 P9 完了条件: 「fresh環境で通し動作（bootstrapから分析まで）、5銘柄（IFRS製造業＋日本基準＋銀行業含む）でレポート生成成功」
 
 - [x] fresh環境: cache_admin clear --all --confirm でゼロから
 - [x] bootstrap from scratch: company_map + 3年分documents (783件) 取得
@@ -137,4 +137,4 @@ plan §5 P9 完了条件: 「fresh環境で通し動作（bootstrapから分析�
 2. **複数要素加算マッピング**: 4502 の `BondsAndBorrowingsCLIFRS + NCLIFRS` のように 2 要素加算が必要なケースが多い。`extra_mappings` に `aggregate: [el1, el2, ...]` 仕様を追加すれば対応可能 (README 「将来の課題」参照)
 3. **MUFG PER NaN**: split_adjust の restated EPS は `BasicEarningsLossPerShareIFRSSummaryOfBusinessResults` (IFRS) しか見ない。JGAAP 銀行は `BasicEarningsLossPerShareSummaryOfBusinessResults` (IFRS なし) も候補にする必要あり
 
-これらは P10 以降の改善項目として記録。Skill の現状機能で **plan §5 全 Phase の完了条件は満たす**。
+これらは P10 以降の改善項目として記録。Skill の現状機能で **init_plan.md §5 全 Phase の完了条件は満たす**。

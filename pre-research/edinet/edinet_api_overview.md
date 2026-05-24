@@ -1,7 +1,7 @@
 # EDINET API v2 概観
 
 > 「結局このAPIで何が取れるのか」を把握するためのリファレンス。
-> 公式仕様書: [docs/edinet/ESE140206.pdf](../../docs/edinet/ESE140206.pdf)
+> 公式仕様書: [references/edinet/ESE140206.pdf](../../references/edinet/ESE140206.pdf)
 
 ---
 
@@ -99,7 +99,7 @@ flowchart LR
 | `pdfFlag` | PDFあり | `1`=あり |
 | `csvFlag` | CSVあり | `1`=あり |
 
-**docTypeCode の主要コード**（[docs/edinet/ESE140327.xlsx](../../docs/edinet/ESE140327.xlsx)）:
+**docTypeCode の主要コード**（[references/edinet/ESE140327.xlsx](../../references/edinet/ESE140327.xlsx)）:
 
 | コード | 書類種別 |
 |--------|---------|
@@ -297,7 +297,7 @@ sequenceDiagram
 
 ## 参考リンク
 
-- 公式 API 仕様書: [docs/edinet/ESE140206.pdf](../../docs/edinet/ESE140206.pdf)
-- 書類種別コード一覧: [docs/edinet/ESE140327.xlsx](../../docs/edinet/ESE140327.xlsx)
-- 書類一覧出力例: [docs/edinet/ESE140328.xlsx](../../docs/edinet/ESE140328.xlsx)
+- 公式 API 仕様書: [references/edinet/ESE140206.pdf](../../references/edinet/ESE140206.pdf)
+- 書類種別コード一覧: [references/edinet/ESE140327.xlsx](../../references/edinet/ESE140327.xlsx)
+- 書類一覧出力例: [references/edinet/ESE140328.xlsx](../../references/edinet/ESE140328.xlsx)
 - EDINET 開発者向け案内（公式）: https://disclosure2dl.edinet-fsa.go.jp/guide/static/disclosure/WZEK0110.html

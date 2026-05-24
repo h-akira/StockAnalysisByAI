@@ -31,7 +31,7 @@ plan §3.4 が想定していた「成果物は CWD」「キャッシュは Skil
 そのまま両立する。
 
 ご指摘の通り、これが Agent Skills の本来の使い方でした。
-私が当初書いた plan.md §4.3 のコマンド例 (`python -m scripts.pipeline`) は
+私が当初書いた init_plan.md §4.3 のコマンド例 (`python -m scripts.pipeline`) は
 Skill の慣習を踏まえておらず、誤りでした。修正します。
 
 ---
@@ -140,7 +140,7 @@ from scripts.config import ConfigError, load_edinet_config
    「**$CLAUDE_SKILL_DIR から直接叩ける形**」に書き換える:
    - 相対 import → 絶対 import
    - 先頭に sys.path 調整スニペット
-2. `plan.md §4.3` のコマンド例を `python -m scripts.X` から
+2. `init_plan.md §4.3` のコマンド例を `python -m scripts.X` から
    `python ${CLAUDE_SKILL_DIR}/scripts/X.py` に書き換え
 3. `README.md` の動作確認コマンドも書き換え
 4. SKILL.md は P8 で正式に書くので、P3 では雛形のコメント差し替えだけ
@@ -184,7 +184,7 @@ CWD はユーザーのプロジェクトディレクトリのまま、スクリ�
 
 - スクリプト 3 つ (pipeline / bootstrap / cache_admin) の絶対 import 化と
   sys.path スニペット追加
-- plan.md §4.3 と README.md のコマンド例書き換え
+- init_plan.md §4.3 と README.md のコマンド例書き換え
 - ユーザー任意 CWD からの動作再検証
 
 ラッパースクリプト (`jsa`) は不要。SKILL.md が `${CLAUDE_SKILL_DIR}` を

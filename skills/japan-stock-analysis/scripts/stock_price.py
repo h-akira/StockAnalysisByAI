@@ -1,7 +1,7 @@
 """yfinance wrapper with a daily on-disk cache.
 
 Caches a full daily-price history per ticker as a CSV under
-cache/prices/{sec_code}.csv with a 1-day TTL (see plan.md §3.6). The cache
+cache/prices/{sec_code}.csv with a 1-day TTL (see init_plan.md §3.6). The cache
 is the full series — callers pick the dates they need (typically fiscal
 year-ends).
 """

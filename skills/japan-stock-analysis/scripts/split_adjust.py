@@ -25,7 +25,7 @@ The cache key is the source_doc_id of the latest report. If the latest
 report changes (a new fiscal year was filed) the cache is rebuilt;
 otherwise it is reused. Fiscal years older than the report's coverage
 (typically 6+ years back) are simply absent from the map — callers should
-treat them as NaN and warn the user, per plan §4.5 / pre-research Step 7
+treat them as NaN and warn the user, per init_plan.md §4.5 / pre-research Step 7
 教訓 #3.
 """
 

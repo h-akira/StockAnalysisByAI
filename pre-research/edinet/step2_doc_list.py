@@ -22,7 +22,7 @@ fiscal year-end. In practice nearly all filings cluster in the 3rd month
 This cuts API calls from ~2,500 (10 yrs × 250 weekdays) to ~300 for 10 years.
 
 == API spec reference ==
-  Section 3-1-1, docs/edinet/ESE140206.pdf
+  Section 3-1-1, references/edinet/ESE140206.pdf
   Endpoint: GET https://disclosure.edinet-fsa.go.jp/api/v2/documents.json
   Parameters:
     date             : YYYY-MM-DD (required) — the filing date to query
@@ -31,7 +31,7 @@ This cuts API calls from ~2,500 (10 yrs × 250 weekdays) to ~300 for 10 years.
   Note: the API host is `disclosure.edinet-fsa.go.jp` (requires key), distinct
   from `disclosure2dl.edinet-fsa.go.jp` (static bulk downloads, no key).
 
-== docTypeCode reference (docs/edinet/ESE140327.xlsx) ==
+== docTypeCode reference (references/edinet/ESE140327.xlsx) ==
   "120" : 有価証券報告書 (annual securities report)        <- target here
   "130" : 訂正有価証券報告書 (amended annual report)
   "140" : 四半期報告書   (quarterly report)

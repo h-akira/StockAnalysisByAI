@@ -24,5 +24,5 @@ PDF を grep したい場合の手順:
 
 ```sh
 brew install poppler  # 一度だけ
-pdftotext docs/edinet/ESE140206.pdf docs/edinet/ESE140206.txt
+pdftotext references/edinet/ESE140206.pdf references/edinet/ESE140206.txt
 ```

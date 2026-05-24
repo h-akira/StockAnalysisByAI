@@ -4,7 +4,7 @@
 このファイルは Claude や他ツールが Skill の出力を二次利用するときの **公式インターフェース**。
 
 - ファイル名: `data_{sec_code}.json`
-- 配置: 実行時の CWD（plan.md §3.4 / §4.3）
+- 配置: 実行時の CWD（init_plan.md §3.4 / §4.3）
 - エンコーディング: UTF-8
 - インデント: 2 スペース（人間も読みやすく）
 - バージョン: `schema_version` フィールドで明示（後方互換が壊れたら bump）
@@ -110,7 +110,7 @@
 
 ## 既知の制約
 
-- **PBR の分割補正は未実装**: 最新報告書の SummaryOfBusinessResults に restated SharesOutstanding が無いため、SharesOutstanding は raw（filing-time 基準）。`PBR` 列は分割をまたぐ期で歪む。plan.md §4.5 split_adjust 行に明記
+- **PBR の分割補正は未実装**: 最新報告書の SummaryOfBusinessResults に restated SharesOutstanding が無いため、SharesOutstanding は raw（filing-time 基準）。`PBR` 列は分割をまたぐ期で歪む。init_plan.md §4.5 split_adjust 行に明記
 - **5年超の期間**: restated EPS の射程外 → PER null + warning
 - **会計基準混在**: 同一銘柄でも年度によって JGAAP↔IFRS が切り替わると financials の値が連続しない可能性あり
 

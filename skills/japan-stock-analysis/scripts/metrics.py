@@ -9,7 +9,7 @@ report. For periods that straddle a stock split, BPS is therefore on the
 filing-time share-count basis while StockPrice is on the latest-split basis.
 This is the same class of issue Step 7 resolved for EPS, but
 SummaryOfBusinessResults does not expose a restated SharesOutstanding, so a
-clean fix requires a separate channel (deferred — see plan.md §4.5 row for
+clean fix requires a separate channel (deferred — see init_plan.md §4.5 row for
 split_adjust).
 """
 

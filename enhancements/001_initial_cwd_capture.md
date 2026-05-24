@@ -18,7 +18,7 @@
 
 ## 背景・動機
 
-[BUG-001](../bugs/001_output_lands_in_skill_dir_not_cwd.md) の根本治療。plan §3.4 の最重要設計原則「成果物は CWD」を保証する仕掛けが現状なく、Skill 配下に成果物が出てユーザーが認識できないインシデントが manual_test で発生した。
+[BUG-001](../bugs/001_output_lands_in_skill_dir_not_cwd.md) の根本治療。init_plan.md §3.4 の最重要設計原則「成果物は CWD」を保証する仕掛けが現状なく、Skill 配下に成果物が出てユーザーが認識できないインシデントが manual_test で発生した。
 
 中立サブエージェントレビュー (agent ID: a0c1cb76d84bde7b2) で以下が判明:
 
@@ -173,7 +173,7 @@ Skill 起動時に `cache/.user_cwd` のようなファイルを生成し、以�
 
 - 親 bug: [BUG-001](../bugs/001_output_lands_in_skill_dir_not_cwd.md)
 - 副次解決 bug: [BUG-008](../bugs/008_potential_report_commit_leakage.md) (gitignore 二重防御)
-- plan: [plan.md §3.4](../plan.md)
-- 設計議論: [QA_skill_invocation.md](../QA_skill_invocation.md)
+- plan: [init_plan.md §3.4](../init_plan.md)
+- 設計議論: [tmp/QA_skill_invocation.md](../tmp/QA_skill_invocation.md)
 - 公式仕様: [Claude Code Agent Skills](https://code.claude.com/docs/en/skills) §"Inject dynamic context" / §"Available string substitutions"
 - 中立レビュー: subagent ID `a0c1cb76d84bde7b2` の指摘で初稿の前提誤りを修正

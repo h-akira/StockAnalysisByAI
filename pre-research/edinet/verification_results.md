@@ -789,7 +789,7 @@ period_end  raw_eps  eps_a_restated  eps_b_split_adj   price  per_raw   per_a   
 3. **(a) の射程外（6年以上前）はどうするか**:
    - 案 X: 「データなし」として PER を NaN で出す（厳密だが過去長期分析できない）
    - 案 Y: (b) でフォールバック計算して「近似値」と注記（実用性 vs 厳密性のトレードオフ）
-   - 案 Z: 「最新3〜5年のみ表示」とスコープを切る（plan §1 の「主に直近数年の財務推移を見る」用途と整合）
+   - 案 Z: 「最新3〜5年のみ表示」とスコープを切る（init_plan.md §1 の「主に直近数年の財務推移を見る」用途と整合）
 4. **`yfinance.Ticker.splits` の ex-date 1日ズレに注意**: 公式分割日 2024-10-01 に対して yfinance は 2024-09-27 を返した。`cumulative_split_after()` の比較演算子 `>` は問題なく動いたが、period_end が分割日と同じ日付の場合の境界挙動は要確認
 
 ### 結論

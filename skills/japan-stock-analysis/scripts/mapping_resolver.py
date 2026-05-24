@@ -1,6 +1,6 @@
 """XBRL element mapping resolver (whitelist + LLM escalation).
 
-Phase P8 implementation. The flow per plan.md §4.4 and SKILL.md §6:
+Phase P8 implementation. The flow per init_plan.md §4.4 and SKILL.md §6:
 
   1. xbrl_extract returns ``ExtractResult.unresolved`` for items the
      whitelist could not pin down.

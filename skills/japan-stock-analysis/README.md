@@ -5,7 +5,7 @@
 > **このファイルは開発リポジトリ用の説明**です。Skill 配布物としてはこの README は
 > 必須ではありません。Skill 本体の利用方法は [SKILL.md](SKILL.md) を参照してください。
 >
-> 同一リポジトリ内に開発過程の設計資料 ([plan.md](../../plan.md) や
+> 同一リポジトリ内に開発過程の設計資料 ([init_plan.md](../../init_plan.md) や
 > [pre-research/](../../pre-research/)) があり、開発時はそれらを参照しますが、
 > Skill 単体（`~/.claude/skills/japan-stock-analysis/` 等にコピー後）はそれらを
 > 必要としません — 必要なナレッジは Skill 配下 [docs/](docs/) に独立した形で
@@ -51,7 +51,7 @@
 
 ## 開発状況
 
-本 Skill は段階的に実装中です。各 Phase の進捗は [plan.md §5](../../plan.md) を参照。
+本 Skill は段階的に実装中です。各 Phase の進捗は [init_plan.md §5](../../init_plan.md) を参照。
 
 | Phase | 状態 |
 |-------|------|
@@ -315,7 +315,7 @@ Skill 用途として近似値で十分との判断だが、JSON 出力に
 
 `cache/company_map.csv` は手動 `refresh-company-map` でしか更新されない。
 新規上場・上場廃止が即座に反映されないため、初出の sec_code 入力時に
-古い情報で誤判定する可能性。plan §3.6 では「7 日」とあったが未実装。
+古い情報で誤判定する可能性。init_plan.md §3.6 では「7 日」とあったが未実装。
 
 実装案: `cache_admin info` で `company_map.mtime` が 7 日以上前なら
 warnings に出す。または pipeline analyze 冒頭で auto-refresh。
@@ -338,11 +338,11 @@ mtime ベースで荒い。期末価格だけ別途キャッシュして TTL を
 #### O. 多銘柄スクリーニング
 
 「PER<15 かつ ROE>10%」のような条件で全上場銘柄から候補抽出する用途は
-plan §1 の非ゴール。本 Skill の bootstrap キャッシュ (documents +
+init_plan.md §1 の非ゴール。本 Skill の bootstrap キャッシュ (documents +
 xbrl) は再利用できるので、別 Skill `japan-stock-screening` として
 切り出すのが筋。
 
-#### P. 株価チャート (plan §5 P10)
+#### P. 株価チャート (init_plan.md §5 P10)
 
 日足/週足/月足の株価チャートを HTML レポートに統合する。yfinance は
 取得可能なのでデータ層は問題なし。Plotly の range selector を組み込めば
@@ -358,7 +358,7 @@ P5 の JSON スキーマに `peers: []` フィールドを追加し、ベンチ�
 #### R. リアルタイム株価・信用残・空売り
 
 EDINET の枠を超えるので別データソース (J-Quants 等) が必要。pre-research
-段階で「J-Quants は古い・期間短いので不採用」と判断 ([plan §1](../../plan.md))。
+段階で「J-Quants は古い・期間短いので不採用」と判断 ([init_plan.md §1](../../init_plan.md))。
 
 ---
 

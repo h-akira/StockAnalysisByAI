@@ -114,13 +114,18 @@ sec_code (例: 7203)
 
 ```
 FinanceSource/
-├── README.md
-├── plan.md                       ← 本ファイル
-├── docs/                         (設計・調査ドキュメント)
-│   └── edinet/                   (既存)
+├── AGENTS.md                     # 全体の指針 (Claude Code 用)
+├── CLAUDE.md                     # @AGENTS.md
+├── init_plan.md                  ← 本ファイル (Single Source of Truth)
+├── references/                   # 外部参照資料 (EDINET 公式仕様 PDF 等)
+│   └── edinet/
 ├── pre-research/                 (既存・凍結。本実装後もリファレンスとして残す)
 │   ├── research_summary.md
-│   └── edinet/                   (Step0〜Step6スクリプト群、検証結果)
+│   └── edinet/                   (Step0〜Step7スクリプト群、検証結果)
+├── bugs/                         # バグ管理 (XXX_template.md / 001_*.md ...)
+├── enhancements/                 # 改善管理 (XXX_template.md / 001_*.md ...)
+├── tmp/                          # 作業ファイル (README参照)
+├── old/                          # アーカイブ (README参照)
 └── skills/                       (Skillの開発ディレクトリ)
     └── japan-stock-analysis/     (単一統合Skill本体。配布単位)
 ```

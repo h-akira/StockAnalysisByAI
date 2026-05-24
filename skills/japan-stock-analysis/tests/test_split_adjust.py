@@ -55,7 +55,7 @@ def test_get_accepts_str_or_timestamp() -> None:
     )
     assert r.get("2023-03-31") == 162.71
     assert r.get(pd.Timestamp("2023-03-31")) == 162.71
-    # Beyond-window period returns None — caller treats as NaN per plan §4.5.
+    # Beyond-window period returns None — caller treats as NaN per init_plan.md §4.5.
     assert r.get("2010-03-31") is None
 
 

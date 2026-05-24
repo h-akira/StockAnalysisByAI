@@ -14,7 +14,7 @@ Public surface:
 Whitelist extraction (Path A + Path B) lives here. Elements that fall
 outside the whitelist are returned in ExtractResult.unresolved so that
 mapping_resolver (Phase P8) can hand them to an LLM for case-by-case
-mapping; see plan.md §4.4.
+mapping; see init_plan.md §4.4.
 """
 
 from __future__ import annotations

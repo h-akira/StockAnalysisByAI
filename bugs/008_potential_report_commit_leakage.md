@@ -36,7 +36,7 @@ __pycache__/
 .pytest_cache/
 ```
 
-`report_*.html`、`data_*.json`、`mapping_escalation_*.json` が除外対象に入っていない。これらは plan §3.4 上「Skill 配下に出るべきでない」ファイルなので gitignore 不要という設計判断だったが、BUG-001 が現に起きた以上、二重防御として gitignore で守るべき。
+`report_*.html`、`data_*.json`、`mapping_escalation_*.json` が除外対象に入っていない。これらは init_plan.md §3.4 上「Skill 配下に出るべきでない」ファイルなので gitignore 不要という設計判断だったが、BUG-001 が現に起きた以上、二重防御として gitignore で守るべき。
 
 ## 影響範囲
 

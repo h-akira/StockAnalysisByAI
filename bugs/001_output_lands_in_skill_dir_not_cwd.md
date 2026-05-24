@@ -10,7 +10,7 @@
 
 ## 概要
 
-`paths.output_dir() == Path.cwd()` 依存のため、Skill 実行途中で何らかの経路で cwd が Skill 配下に変わると、レポートが意図しない場所に落ちる。plan §3.4 の最重要設計原則 (成果物は CWD) が守れていない。
+`paths.output_dir() == Path.cwd()` 依存のため、Skill 実行途中で何らかの経路で cwd が Skill 配下に変わると、レポートが意図しない場所に落ちる。init_plan.md §3.4 の最重要設計原則 (成果物は CWD) が守れていない。
 
 ## 症状
 
@@ -65,7 +65,7 @@
 
 - 解決 enhancement: [ENH-001](../enhancements/001_initial_cwd_capture.md)
 - 関連 bug: [BUG-008](008_potential_report_commit_leakage.md) (二重防御として gitignore も検討)
-- plan: [plan.md §3.4 パス解決方針](../plan.md)
-- 設計議論: [QA_skill_invocation.md](../QA_skill_invocation.md)
+- plan: [init_plan.md §3.4 パス解決方針](../init_plan.md)
+- 設計議論: [tmp/QA_skill_invocation.md](../tmp/QA_skill_invocation.md)
 - 観測ログ: `manual_test/history.md` L376 (cache_admin info 時は CWD 正常) と L3033-3066 (pipeline 時 Skill 配下)
 - 検証環境: Skill commit `c8e0453` 付近、Python 3.14.3、macOS 14

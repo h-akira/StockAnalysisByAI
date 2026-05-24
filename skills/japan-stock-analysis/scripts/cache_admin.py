@@ -21,7 +21,7 @@ Usage:
     # Nuclear (--confirm gated):
     python3 ${CLAUDE_SKILL_DIR}/scripts/cache_admin.py clear --all --confirm
 
-See plan.md §4.3 for the rationale behind --confirm gating.
+See init_plan.md §4.3 for the rationale behind --confirm gating.
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def clear_type(type_name: str) -> list[str]:
 
 # Per-sec-code file names per type. xbrl is intentionally absent because it's
 # doc-id keyed, not sec-code keyed — sharing across companies is impossible
-# anyway but the lookup channel just doesn't exist (plan.md §4.3 note).
+# anyway but the lookup channel just doesn't exist (init_plan.md §4.3 note).
 _PER_SEC_FILES = {
     "derived": lambda sc: [
         paths.DERIVED_DIR / f"timeseries_{sc}.csv",

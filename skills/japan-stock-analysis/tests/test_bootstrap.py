@@ -1,7 +1,7 @@
 """Unit tests for scripts.bootstrap.
 
 Network-free: only pure functions and the file-cache path are exercised.
-Real EDINET fetches are exercised manually (see plan.md §5 P2 closing).
+Real EDINET fetches are exercised manually (see init_plan.md §5 P2 closing).
 """
 
 from __future__ import annotations

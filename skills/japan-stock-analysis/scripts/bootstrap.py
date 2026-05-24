@@ -1,6 +1,6 @@
 """Bootstrap: heavy initial fetch of company_map and documents_index.
 
-Strategy (see plan.md §3.5):
+Strategy (see init_plan.md §3.5):
     documents.json is a per-date API with no company/docType filter, so the
     cache primary key is the date itself. We pull every weekday in the past
     N years into cache/documents/{YYYY-MM-DD}.json. Existing files are

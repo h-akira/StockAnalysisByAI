@@ -8,7 +8,7 @@ Subcommand:
     python3 ${CLAUDE_SKILL_DIR}/scripts/pipeline.py analyze --sec-code 7203 --output-dir /tmp/reports
 
 Stdout contract: a single JSON object with a top-level ``status`` field.
-Possible statuses (see plan.md §4.3):
+Possible statuses (see init_plan.md §4.3):
     success           - everything ran; outputs and any warnings included
     needs_bootstrap   - cache/documents/ has no annual reports for this code
     config_error      - secret.json missing or invalid
@@ -123,7 +123,7 @@ def _analyze_one(sec_code: str, args: argparse.Namespace, api_key: str) -> dict:
 
     # Resolve restated-EPS mapping from the latest annual report. Cache key
     # is the latest doc_id, so this is a one-time XBRL pull per fiscal-year
-    # change. See plan §3.6 and pre-research Step 7.
+    # change. See init_plan.md §3.6 and pre-research Step 7.
     latest_doc = docs[-1]
     split_adjust = resolve_split_adjust(
         sec_code,

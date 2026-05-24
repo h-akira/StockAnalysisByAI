@@ -5,7 +5,7 @@ Skill keeps working regardless of where users place / symlink it.
 Output artifacts go to the user's current working directory (CWD), so each
 analysis lands in the project folder the user is working in.
 
-See plan.md §3.4 for the policy.
+See init_plan.md §3.4 for the policy.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 # scripts/ の親 = Skill ルート
 SKILL_ROOT: Path = Path(__file__).resolve().parent.parent
 
-# Skill-internal cache (gitignored). See plan.md §3.2.
+# Skill-internal cache (gitignored). See init_plan.md §3.2.
 CACHE_DIR: Path = SKILL_ROOT / "cache"
 DOCUMENTS_DIR: Path = CACHE_DIR / "documents"
 XBRL_DIR: Path = CACHE_DIR / "xbrl"
