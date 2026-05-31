@@ -136,6 +136,37 @@ env/bin/pytest tests/
 
 実装変更時は必ずローカル pytest を通してから commit すること。CI は現状未設定（[README §テスト](skills/japan-stock-analysis/README.md) に将来構想あり）。
 
+## 手動テスト (`manual_test_*/`)
+
+`manual_test_*/`（`manual_test_01/`, `manual_test_02/`, ...）は、**人間が別セッションで Skill を
+実機実行して挙動を確認するための領域**。連番で 1 テスト 1 ディレクトリ。すべて gitignore 済
+（ルート `.gitignore` の `manual_test_*/`）。AI が通常の実装作業で参照する必要はない。
+
+### 基本方針: 「clone されて使われる直後」を再現する
+
+この領域は、**利用者が Skill を `~/.claude/skills/` 等にコピーした直後のクリーンな状態**を模す。
+つまり配布物に含まれないものは原則「無い」状態から始める:
+
+- **venv（`env/`）は含めない**。利用者は自分で `python -m venv env && env/bin/pip install -r
+  requirements.txt` する。手動テストでもその手順から始めるのが実態に忠実。AI が先回りで venv を
+  作らない（作ると「セットアップ込みで動くか」の検証にならない）。
+- **`derived/` `mappings/` `split_adjust/` `prices/` `xbrl/` のキャッシュは空から始める**。
+  これらは analyze 実行で生成される銘柄固有の派生物。前テストの結果を残すと検証が汚染される。
+- **pytest はネットワーク不要・fixture 同梱で完走する**ので、手動テスト環境でも venv さえ作れば
+  `env/bin/pytest tests/` がそのまま通る（約 3 秒〜、117 件想定）。
+
+### 例外: bootstrap キャッシュ（銘柄非依存）は使い回してよい
+
+唯一の例外が **bootstrap で取得する重いキャッシュ**。取得に時間がかかり（10 年分 documents で
+~40 分・約 600MB）、かつ**銘柄に依存しない公開情報のスナップショット**なので、テスト間でコピーして
+使い回してよい:
+
+- `cache/documents/`（全営業日の documents.json、~2,600 ファイル）
+- `cache/company_map.csv`（EDINET 企業マスタ）
+
+これらだけを既存の `manual_test_*/.claude/skills/japan-stock-analysis/cache/` からコピーし、
+残りの cache サブディレクトリは空で用意する。キャッシュポリシーの正は `init_plan.md` §3.5。
+
 ## 開発ルール
 
 以下の開発ルールを必ず守ること。
