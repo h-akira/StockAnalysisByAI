@@ -39,9 +39,10 @@ cache、補正結果は CWD」と銘柄固有データの置き場が二分さ�
 ## 要件
 
 - **グローバル（Skill 配下 `cache/`）に残すもの**: `documents/`（日付単位・全社共通）、`company_map.csv`。
-- **CWD に移すもの**: `xbrl/`、`derived/`、`mappings/`、`split_adjust/`、`prices/`。配置は CWD 直下の
-  作業用ディレクトリ（例 `./cache/` か `./.japan-stock/` 等。一次/代替 JSON・スクリプト・レポートと
-  同じ CWD ツリーに収める。命名は未確定事項で詰める）。
+- **CWD に移すもの**: `xbrl/`、`derived/`、`mappings/`、`split_adjust/`、`prices/`。配置は
+  **`.japan-stock/cache/` 配下**（CWD 直下の隠し作業ディレクトリ。[ENH-007](007_ai_driven_report_layer.md) R3 /
+  [architecture.md](../architecture.md) §6 の CWD レイアウトと共通）。成果物（report/data）は CWD 直下に残し、
+  作業物（キャッシュ・スクリプト）は `.japan-stock/` にまとめて隠す。`.japan-stock/` は gitignore 推奨。
 - `scripts/paths.py` のパス解決を、グローバル分（`DOCUMENTS_DIR` / `COMPANY_MAP`）は `SKILL_ROOT/cache`、
   銘柄固有分（`XBRL_DIR` / `DERIVED_DIR` / `MAPPINGS_DIR` / `SPLIT_ADJUST_DIR` / `PRICES_DIR`）は
   `output_dir()`（CWD）配下、と分けて解決するよう変更する。
@@ -86,13 +87,17 @@ cache、補正結果は CWD」と銘柄固有データの置き場が二分さ�
 - ENH-007 とも整合（むしろ補完）: ENH-007 は補正結果・スクリプト・レポートを CWD に集約する方針で、
   本 enhancement は一次データのキャッシュも CWD に寄せることで「銘柄固有はすべて CWD」を完成させる。
 
-## 未確定事項（実装前に詰める）
+## 決定事項・未確定事項
 
-- CWD 側キャッシュのディレクトリ名・構造（`./cache/` か `./.japan-stock/cache/` か等。成果物 JSON/HTML と
-  混ざらない置き方）。
-- CWD 側キャッシュの gitignore 方針（手動テスト領域は `manual_test_*/` で一括無視されるが、実利用の CWD では
-  ユーザーのリポジトリを汚さない配慮が要る）。
-- `cache_admin` のグローバル／CWD 双方の扱い・表示。
+確定済み（ENH-007 と共通）:
+- CWD 側キャッシュの置き場は **`.japan-stock/cache/`**（成果物は CWD 直下、作業物は `.japan-stock/` に隠す）。
+- gitignore は **`.japan-stock/` を無視**（実利用 CWD でユーザーのリポジトリを汚さない。手動テストは
+  `manual_test_*/` で一括無視）。
+
+未確定（実装前に詰める）:
+- `cache_admin` のグローバル／CWD 双方の扱い・表示（`info`/`clear` が両系統を見るようにする）。
+- pytest が CWD 依存でキャッシュ位置を見失わないためのテスト fixtures／一時ディレクトリ戦略
+  （`output_dir()` が `Path.cwd()` 依存になるため）。
 
 ## 対応
 

@@ -183,21 +183,26 @@ EDINET の `documents.json` API は**日付単位**で全社の提出書類を�
 
 ### ユーザー CWD の中身（1 銘柄分析の作業場）
 
-銘柄固有のものは成果物・キャッシュ・AI 生成スクリプトすべて CWD に集まる。下図は目標レイアウト
-（`📁?` は ENH-007/009 で確定する暫定。実際のディレクトリ名・gitignore 方針は両 ENH の未確定事項で詰める）:
+銘柄固有のものは成果物・AI 生成スクリプト・キャッシュすべて CWD に集まる。**見せる成果物は CWD 直下、
+作業物は隠しディレクトリ `.japan-stock/`** に分ける（`.japan-stock/` は gitignore 推奨）:
 
 ```
 ユーザー CWD/                      （例: 投資検討プロジェクトのフォルダ）
 ├── report_9432.html              成果物: レポート
 ├── data_9432.json                成果物: 一次 JSON（不可侵。元データ + 計算値）
-├── data_9432_adjusted.json       成果物: 代替 JSON（AI 補正後・全量。あれば優先）
-├── scripts/                      AI が作る加工/分析スクリプト（銘柄番号命名・日付なし）
-│   ├── 9432_report.py            assets/ の参考実装のコピー（必要時に編集）
-│   ├── 9432_*.py                 補正・独自指標などの加工スクリプト
-│   └── README.md                 各スクリプトの目的・入出力・補正根拠（必須）
-└── 📁? 銘柄固有キャッシュ          xbrl/ derived/ mappings/ split_adjust/ prices/
-                                   （ENH-009 で CWD へ移す。置き場名は未確定）
+├── data_9432_adjusted.json       成果物: 代替 JSON（AI 補正後・全量・単一に集約。あれば優先）
+└── .japan-stock/                 作業物（隠し・gitignore 推奨）
+    ├── scripts/
+    │   ├── 9432_report.py         assets/ の参考実装のコピー（初回のみ・必要時に編集）
+    │   ├── 9432_*.py              雛形外の独自分析などの加工スクリプト
+    │   └── README.md              各スクリプトの目的・入出力・補正根拠（必須）
+    └── cache/                     銘柄固有キャッシュ（ENH-009 で CWD へ移す）
+        └── xbrl/ derived/ mappings/ split_adjust/ prices/
 ```
+
+> PBR のような全銘柄共通の一般補正は固定スクリプト側（[ENH-008](enhancements/008_pbr_split_adjustment.md)）で
+> 行うため `.japan-stock/scripts/` に出てくるのは主に雛形外の分析・所見。詳細は
+> [ENH-007](enhancements/007_ai_driven_report_layer.md)（レポート層）/ [ENH-009](enhancements/009_cache_relocation_cwd.md)（キャッシュ）。
 
 ---
 
