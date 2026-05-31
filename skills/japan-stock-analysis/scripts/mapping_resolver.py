@@ -45,12 +45,20 @@ if __package__ in (None, ""):
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts import paths
 from scripts.xbrl_extract import ITEM_KEYS, inventory_candidates
+
+# Numbers in a rationale that look like financial magnitudes; commas and a
+# trailing scale word (B / billion / 億 etc.) are tolerated. Used by the
+# optional value cross-check (ENH-004) to flag figures absent from the payload.
+_NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+# Relative tolerance when matching a rationale number against a sample_value.
+_VALUE_CHECK_REL_TOL = 0.01
 
 
 def mapping_cache_path(sec_code: str) -> Path:
@@ -119,6 +127,92 @@ def build_escalation_payload(
     return out_path
 
 
+def _parse_numbers(text: str) -> list[float]:
+    """Extract numeric magnitudes from free text (rationale). Tolerates commas.
+
+    Single-digit integers (0-9) are ignored — they are almost always element
+    counts / list ordinals rather than financial figures, and matching them
+    would add noise.
+    """
+    out: list[float] = []
+    for tok in _NUMBER_RE.findall(text):
+        try:
+            val = float(tok.replace(",", ""))
+        except ValueError:
+            continue
+        if abs(val) < 10:
+            continue
+        out.append(val)
+    return out
+
+
+def _sample_values(candidates: list[dict]) -> list[float]:
+    """Numeric sample_values present in the escalation payload candidates."""
+    vals: list[float] = []
+    for c in candidates:
+        sv = c.get("sample_value")
+        if sv is None:
+            continue
+        try:
+            vals.append(float(str(sv).replace(",", "")))
+        except ValueError:
+            continue
+    return vals
+
+
+def _value_matches_payload(value: float, sample_values: list[float]) -> bool:
+    """True if value is within relative tolerance of any candidate sample_value."""
+    for sv in sample_values:
+        scale = max(abs(value), abs(sv), 1.0)
+        if abs(value - sv) <= _VALUE_CHECK_REL_TOL * scale:
+            return True
+    return False
+
+
+def check_rationale_values(mappings: dict, candidates: list[dict]) -> list[str]:
+    """ENH-004 safety net: flag rationale numbers absent from the payload.
+
+    For each mapping's rationale, any financial-magnitude number that does not
+    match (within tolerance) some candidate sample_value is surfaced as a
+    warning. This is a *hint only* — it never blocks the save, because legit
+    aggregate results and derived values may not appear verbatim in candidates.
+    """
+    sample_values = _sample_values(candidates)
+    if not sample_values:
+        return []
+    warnings: list[str] = []
+    for item, spec in mappings.items():
+        rationale = spec.get("rationale", "") if isinstance(spec, dict) else ""
+        unmatched = [
+            n for n in _parse_numbers(rationale)
+            if not _value_matches_payload(n, sample_values)
+        ]
+        if unmatched:
+            shown = ", ".join(f"{n:g}" for n in unmatched)
+            warnings.append(
+                f"[{item}] rationale contains numbers not found in the "
+                f"escalation candidates' sample_value: {shown}. Verify these "
+                f"are real payload values (or an intended aggregate result), "
+                f"not guessed/computed figures."
+            )
+    return warnings
+
+
+def _load_candidates(escalation_json: str | None) -> list[dict]:
+    """Read the candidates[] from an escalation payload, or [] if unavailable."""
+    if not escalation_json:
+        return []
+    p = Path(escalation_json)
+    if not p.exists():
+        return []
+    try:
+        body = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    cand = body.get("candidates")
+    return cand if isinstance(cand, list) else []
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -151,6 +245,12 @@ def _cmd_save(args: argparse.Namespace) -> int:
             "reason": f"mappings missing element/context/rationale for: {bad}",
         })
 
+    # ENH-004 safety net: if the escalation payload is supplied, flag rationale
+    # numbers absent from the candidates. Hint only — never blocks the save.
+    value_check_warnings = check_rationale_values(
+        mappings, _load_candidates(args.escalation_json)
+    )
+
     out = save_mapping(args.sec_code, body, resolved_by=args.resolved_by)
     return _emit({
         "status": "success",
@@ -159,6 +259,7 @@ def _cmd_save(args: argparse.Namespace) -> int:
         "cache_path": str(out),
         "mapped_items": list(mappings.keys()),
         "unresolved": body.get("unresolved", []),
+        "value_check_warnings": value_check_warnings,
     })
 
 
@@ -184,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Path to the JSON file (Claude wrote per docs/xbrl_variation_knowledge.md §7)")
     p_save.add_argument("--resolved-by", default="llm",
                         help="Audit tag for who/what produced this mapping (default: llm)")
+    p_save.add_argument("--escalation-json", default=None,
+                        help="Optional path to the mapping_escalation_*.json this mapping "
+                             "answers. When given, rationale numbers are cross-checked against "
+                             "candidate sample_values and mismatches are reported as "
+                             "value_check_warnings (does not block the save). See ENH-004.")
     p_save.set_defaults(func=_cmd_save)
 
     p_show = sub.add_parser("show", help="Print the cached mapping for a sec_code")

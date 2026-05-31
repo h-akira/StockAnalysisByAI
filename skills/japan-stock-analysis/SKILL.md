@@ -233,12 +233,34 @@ EDINET API の明示的なレート上限は公式に未公開（pre-research �
 3. **判定する**:
    各未解決項目について、ナレッジに照らして適切な要素を **1つ** 選ぶ。判定根拠 (どの要素を選び、なぜか) を必ず残す。
 
+   判定時のチェックリスト（save → 再 analyze の往復を最小化するため、**初回判定で拾い切る**）:
+   - 候補ペイロードに単一要素で解決できる項目（例: `SharesOutstanding` の
+     `NumberOfIssuedShares...` 系）があれば、その場で mapping に含める。後から
+     「もっと良い候補があった」と気付いて 2 回目の save をするのを避ける。
+   - 候補ペイロードに適切な値が**存在しない**項目は、無理にマッピングせず §6.3 の
+     `unresolved[]` に回す（近似や暗算で値を作らない）。
+   - 全未解決項目を一度に判定し、**1 回の save** で確定させることを目指す。
+
+   **rationale には実値だけを書く（重要）**:
+   - rationale に数値を書くときは、**候補ペイロードに実在する `sample_value` をそのまま引用**する。
+     ペイロードを読まずに推測した値・暗算した合算値・記憶に頼った値を書いてはならない。
+   - 「IFRS variant」「fallback に一致」等の根拠も、候補ペイロードに**実在する要素名・値**に
+     基づくこと。会計基準（JGAAP/IFRS）は候補要素の名前空間から判断する。
+   - aggregate（複数要素の合算）を扱う場合、構成要素として挙げる各値は候補ペイロードの実 `sample_value`
+     であること（合算結果そのものはペイロードに無くてよいが、構成要素は実値で確認する）。
+   - 適切な実値が候補ペイロードに無いなら、値を作らず §6.3 の `unresolved[]` に回す。
+
 4. **保存する**:
    ```bash
    ${CLAUDE_SKILL_DIR}/env/bin/python3 ${CLAUDE_SKILL_DIR}/scripts/mapping_resolver.py save \
      --sec-code 8306 \
-     --mapping-json <Claudeが組み立てた JSON ファイルのパス>
+     --mapping-json <Claudeが組み立てた JSON ファイルのパス> \
+     --escalation-json <candidates_payload のパス>
    ```
+   `--escalation-json` に手順2で読んだ候補ペイロード（`mapping_escalation_*.json`）を渡すと、
+   rationale 中の数値が候補の実 `sample_value` と照合され、乖離があれば出力 JSON の
+   `value_check_warnings` に出る（保存はブロックしない安全弁。捏造値の自己検知に活用する）。
+   `value_check_warnings` が出たら rationale を実値に直して save し直すこと。
    保存形式は [docs/xbrl_variation_knowledge.md](docs/xbrl_variation_knowledge.md) の §マッピングJSONフォーマット を参照。
 
 5. **再実行**:
@@ -271,6 +293,7 @@ needs_mapping は再発しない。warnings に
 ### 6.4 注意
 
 - Claudeのマッピング判定はナレッジに無い業種で **誤マッピングのリスクがある**。判定根拠 (`rationale`) を必ず残し、JSON出力の `metrics.PER` 等は `resolved_by: llm` フラグで人間レビューを促すこと
+- **rationale に書く数値は候補ペイロードの実 `sample_value` のみ**（§6.2 手順3 参照）。`save` に `--escalation-json` で候補ペイロードを渡すと、rationale 中の数値が実値と乖離していないか軽く照合され、乖離があれば `value_check_warnings` が出力される（保存自体はブロックしない安全弁）。捏造値の混入を自分で気付くために、この照合を活用すること
 - 同一企業・同一業種でも会計基準が IFRS↔JGAAP で切り替わるとマッピングが変わる可能性あり
 - 業種固有の集計値が XBRL に無い場合は **§6.3 の `unresolved[]` パターン**を使う（無理に近似マッピングしない）
 
@@ -305,7 +328,24 @@ needs_mapping は再発しない。warnings に
 
 `warnings` がある場合は併せて提示し、特に「PER NaN」や「分割未補正期」「mapping LLM 判定」が含まれていれば**強調する**。
 
+> **生 EPS 系列の整合確認（BUG-009）**: `financials.EarningsPerShare` は各有報の**報告時点基準**の値で、
+> 株式分割をまたぐ古い期では分割補正前の値がそのまま残り、系列の連続性が崩れることがある
+> （PER は分割補正済みの restated EPS を使うため影響しないが、財務系列の生 EPS グラフ/表には出る）。
+> パイプラインは `ProfitLoss / SharesOutstanding` から逆算した implied EPS と生 EPS が桁レベルで
+> ずれる期を warning 化するが、**古い期は SharesOutstanding が欠落していて逆算検証できず、コードでは
+> 拾えない**。ユーザーに提示する前に、生 EPS 系列を `ProfitLoss` の水準と照らし、利益が大きい期に
+> EPS が不自然に小さい等の**一桁ずれ**が無いか目視確認し、疑わしい期があれば「この期の生 EPS は
+> 分割補正前の基準の可能性があり、系列として不連続」と明示すること。会社ごとに分割の有無・時期が
+> 異なるため固定ルールでは判定しきれない——**実値を見て判断する**。
+
 `data_*.json` のスキーマは [docs/json_schema.md](docs/json_schema.md) を参照。
+
+> **成果物を再検証する際の注意**: `data_*.json` を Bash 等で読み直して値を交差検証する場合、
+> データ構造は `fiscal_years[]` の配列で、各要素の値は `fiscal_years[].financials.X` /
+> `fiscal_years[].metrics.X` の入れ子であることに留意する（`d["financials"]` や `currency`、
+> `fiscal_year` といったトップレベルのキー/列は存在しない）。**仮定でキー名を当てて並列 Bash を
+> 走らせると、1 つの KeyError でバッチ全体が巻き添えキャンセルされる**。先に
+> [docs/json_schema.md](docs/json_schema.md) で実スキーマを確認してから検証コマンドを組むこと。
 
 ## 8. 既知の制限事項
 

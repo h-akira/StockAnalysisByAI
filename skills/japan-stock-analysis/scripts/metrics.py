@@ -40,6 +40,52 @@ def load_timeseries(sec_code: str) -> pd.DataFrame:
     return df.set_index("period_end").sort_index()
 
 
+# BUG-009: order-of-magnitude gap between reported raw EPS and the EPS implied
+# by ProfitLoss / SharesOutstanding flags periods whose raw EPS is on a
+# pre-split (or otherwise inconsistent) basis. Kept deliberately conservative
+# so it never fires on normal restatement noise or accounting differences:
+#   - only periods where SharesOutstanding is present (implied EPS computable),
+#   - only profitable periods (ProfitLoss > 0; avoids unstable ratios near 0
+#     and negative EPS),
+#   - only a >=3x discrepancy (a true digit-level mismatch, not a few %).
+# Periods that can't be checked this way (e.g. SharesOutstanding missing in the
+# oldest filings) are left to the SKILL.md §7 AI-side consistency check.
+_EPS_IMPLIED_GAP_RATIO = 3.0
+
+
+def eps_consistency_warning(df: pd.DataFrame) -> str | None:
+    """Return a warning string if any period's raw EPS is order-of-magnitude
+    inconsistent with ProfitLoss / SharesOutstanding, else None. See BUG-009."""
+    flagged: list[str] = []
+    for pe in df.index:
+        eps = df["EarningsPerShare"].get(pe)
+        profit = df["ProfitLoss"].get(pe)
+        shares = df["SharesOutstanding"].get(pe)
+        if eps is None or profit is None or shares is None:
+            continue
+        if pd.isna(eps) or pd.isna(profit) or pd.isna(shares):
+            continue
+        if shares <= 0 or profit <= 0 or eps <= 0:
+            continue
+        implied = profit / shares
+        ratio = max(implied / eps, eps / implied)
+        if ratio >= _EPS_IMPLIED_GAP_RATIO:
+            flagged.append(
+                f"{pe.date().isoformat()} (reported EPS {eps:g}, "
+                f"implied {implied:.2f} from ProfitLoss/Shares, ~{ratio:.1f}x apart)"
+            )
+    if not flagged:
+        return None
+    return (
+        "Raw EarningsPerShare is order-of-magnitude inconsistent with "
+        "ProfitLoss/SharesOutstanding for: " + "; ".join(flagged) + ". "
+        "Likely a pre-stock-split basis carried over from the filing of that year "
+        "(the financials EPS series is reported-as-of-filing, not split-adjusted). "
+        "PER uses split-adjusted restated EPS and is unaffected; treat the raw EPS "
+        "series for these periods with caution. See BUG-009."
+    )
+
+
 def _restated_eps_series(df: pd.DataFrame, split_adjust: SplitAdjustResult | None) -> pd.Series:
     """Return EPS series for PER calc. Falls back to raw EPS where restated is absent."""
     raw = df["EarningsPerShare"]
@@ -92,6 +138,12 @@ def build_metrics(
     """Load timeseries, fetch prices, compute metrics. Returns (df, warnings)."""
     warnings: list[str] = []
     df = load_timeseries(sec_code)
+
+    # BUG-009: flag raw EPS periods that are order-of-magnitude inconsistent
+    # with ProfitLoss/Shares (pre-split basis). Independent of yfinance/PER.
+    eps_warning = eps_consistency_warning(df)
+    if eps_warning:
+        warnings.append(eps_warning)
 
     if use_yfinance:
         try:

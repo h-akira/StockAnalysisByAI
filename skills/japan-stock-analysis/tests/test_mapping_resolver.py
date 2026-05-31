@@ -200,3 +200,73 @@ def test_inventory_candidates_skips_empty_text() -> None:
     for c in candidates:
         assert c["sample_value"]  # truthy, non-empty
 
+
+# ---------- ENH-004: rationale value cross-check ----------
+
+def test_check_rationale_values_flags_fabricated_numbers() -> None:
+    """Numbers in rationale absent from candidate sample_values are flagged."""
+    candidates = [
+        {"element": "jppfs_cor:BasicEarningsPerShare", "context": "CurrentYearDuration",
+         "sample_value": "192.22"},
+    ]
+    mappings = {
+        # 171.79 is not present in candidates -> should be flagged.
+        "EarningsPerShare": {"element": "jppfs_cor:BasicEarningsPerShare",
+                             "context": "CurrentYearDuration",
+                             "rationale": "Value 171.79 matches jppfs fallback"},
+    }
+    warnings = mapping_resolver.check_rationale_values(mappings, candidates)
+    assert len(warnings) == 1
+    assert "171.79" in warnings[0]
+    assert "EarningsPerShare" in warnings[0]
+
+
+def test_check_rationale_values_passes_real_values() -> None:
+    """A rationale citing a real sample_value produces no warning."""
+    candidates = [
+        {"element": "jppfs_cor:BasicEarningsPerShare", "context": "CurrentYearDuration",
+         "sample_value": "192.22"},
+    ]
+    mappings = {
+        "EarningsPerShare": {"element": "jppfs_cor:BasicEarningsPerShare",
+                             "context": "CurrentYearDuration",
+                             "rationale": "EPS 192.22 from JGAAP basic summary"},
+    }
+    assert mapping_resolver.check_rationale_values(mappings, candidates) == []
+
+
+def test_check_rationale_values_no_candidates_is_silent() -> None:
+    """Without a payload (no candidates) the check is a no-op."""
+    mappings = {
+        "X": {"element": "a:b", "context": "c", "rationale": "anything 12345"},
+    }
+    assert mapping_resolver.check_rationale_values(mappings, []) == []
+
+
+def test_cli_save_emits_value_check_warnings_with_escalation_json(monkeypatch, tmp_path) -> None:
+    _patch_mappings_dir(monkeypatch, tmp_path)
+    escalation = tmp_path / "mapping_escalation_8306.json"
+    escalation.write_text(json.dumps({
+        "candidates": [
+            {"element": "jppfs_cor:BasicEarningsPerShare",
+             "context": "CurrentYearDuration", "sample_value": "192.22"},
+        ],
+    }), encoding="utf-8")
+    src = tmp_path / "m.json"
+    src.write_text(json.dumps({
+        "mappings": {
+            "EarningsPerShare": {"element": "jppfs_cor:BasicEarningsPerShare",
+                                 "context": "CurrentYearDuration",
+                                 "rationale": "Value 171.79 matches fallback"},
+        }
+    }), encoding="utf-8")
+    rc, body = _run_main(["save", "--sec-code", "8306",
+                          "--mapping-json", str(src),
+                          "--escalation-json", str(escalation)])
+    # Save still succeeds — the check never blocks.
+    assert rc == 0
+    assert body["status"] == "success"
+    assert body["value_check_warnings"]
+    assert "171.79" in body["value_check_warnings"][0]
+    assert (tmp_path / "8306.json").exists()
+

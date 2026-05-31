@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from scripts.metrics import compute_metrics
+from scripts.metrics import compute_metrics, eps_consistency_warning
 
 # Toyota FY2024 financials (from cache/derived/timeseries_7203.csv).
 TOYOTA_FY2024 = {
@@ -128,3 +128,51 @@ def test_missing_price_propagates_as_nan() -> None:
     assert pd.isna(m.loc["2025-03-31", "PBR"])
     # Financial ratios still computed.
     assert not pd.isna(m.loc["2025-03-31", "ROE"])
+
+
+# ---------- BUG-009: raw EPS consistency check (must not regress per company) ----------
+
+def _eps_df(rows: dict) -> pd.DataFrame:
+    """rows: {period_iso: {EarningsPerShare, ProfitLoss, SharesOutstanding}}."""
+    idx = pd.to_datetime(list(rows.keys()))
+    return pd.DataFrame(list(rows.values()), index=idx)
+
+
+def test_eps_consistency_flags_order_of_magnitude_gap() -> None:
+    # FY2017 Tokyo Gas-like: reported 23.02 but implied ~123 from profit/shares.
+    df = _eps_df({
+        "2017-03-31": {"EarningsPerShare": 23.02, "ProfitLoss": 54_044_000_000,
+                       "SharesOutstanding": 440_000_000},
+    })
+    w = eps_consistency_warning(df)
+    assert w is not None
+    assert "2017-03-31" in w
+    assert "BUG-009" in w
+
+
+def test_eps_consistency_silent_on_normal_restatement_noise() -> None:
+    # Healthy period: implied EPS ~ reported within a few % — must NOT fire.
+    df = _eps_df({
+        "2025-03-31": {"EarningsPerShare": 359.56, "ProfitLoss": 4_765_086_000_000,
+                       "SharesOutstanding": 13_250_000_000},  # implied ~359.6
+    })
+    assert eps_consistency_warning(df) is None
+
+
+def test_eps_consistency_skips_loss_making_periods() -> None:
+    # Negative ProfitLoss / EPS: ratio is unstable, must be skipped (no false alarm).
+    df = _eps_df({
+        "2020-03-31": {"EarningsPerShare": -5.0, "ProfitLoss": -10_000_000_000,
+                       "SharesOutstanding": 400_000_000},
+    })
+    assert eps_consistency_warning(df) is None
+
+
+def test_eps_consistency_skips_periods_without_shares() -> None:
+    # Oldest filings often lack SharesOutstanding -> not computable, skip it.
+    # (Those periods are covered by the SKILL.md §7 AI-side check instead.)
+    df = _eps_df({
+        "2016-03-31": {"EarningsPerShare": 46.68, "ProfitLoss": 112_977_000_000,
+                       "SharesOutstanding": float("nan")},
+    })
+    assert eps_consistency_warning(df) is None

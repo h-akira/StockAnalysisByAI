@@ -58,28 +58,48 @@ def _fiscal_labels(df: pd.DataFrame) -> list[str]:
 
 
 def build_single(df: pd.DataFrame, name: str, sec_code: str) -> go.Figure:
+    # Metrics are split into separate subplots by *nature* rather than crammed
+    # onto a shared axis: PER and PBR differ by ~20x in scale (PBR would flatten
+    # against the PER-dominated axis), and profitability (ROE / operating margin)
+    # and financial safety (equity ratio / D/E) occupy different level bands.
     x = _fiscal_labels(df)
     fig = make_subplots(
-        rows=4, cols=1,
+        rows=6, cols=1,
         subplot_titles=(
             "売上高（兆円）",
             "営業利益・当期純利益（兆円）",
-            "ROE・自己資本比率・営業利益率（%）",
-            "PER・PBR（倍）",
+            "収益性: ROE・営業利益率（%）",
+            "安全性: 自己資本比率（%）・D/Eレシオ（倍）",
+            "PER（倍）",
+            "PBR（倍）",
         ),
-        vertical_spacing=0.08,
+        specs=[
+            [{}], [{}], [{}],
+            [{"secondary_y": True}],  # equity ratio (%) left, D/E (raw) right
+            [{}], [{}],
+        ],
+        vertical_spacing=0.05,
     )
     fig.add_bar(x=x, y=df["NetSales"] / TRILLION, name="売上高", row=1, col=1)
     for col, label in [("OperatingIncome", "営業利益"), ("ProfitLoss", "当期純利益")]:
         fig.add_bar(x=x, y=df[col] / TRILLION, name=label, row=2, col=1)
-    for col, label in [("ROE", "ROE"), ("EquityRatio", "自己資本比率"), ("OperatingMargin", "営業利益率")]:
+    # Profitability — same band, both "%", comparable scale.
+    for col, label in [("ROE", "ROE"), ("OperatingMargin", "営業利益率")]:
         fig.add_scatter(x=x, y=df[col] * 100, name=label, mode="lines+markers", row=3, col=1)
-    for col, label in [("PER", "PER"), ("PBR", "PBR")]:
-        fig.add_scatter(x=x, y=df[col], name=label, mode="lines+markers", row=4, col=1)
+    # Safety — equity ratio on the left (%) axis, D/E on the right (raw) axis so
+    # the two unrelated scales do not compress each other.
+    fig.add_scatter(x=x, y=df["EquityRatio"] * 100, name="自己資本比率",
+                    mode="lines+markers", row=4, col=1, secondary_y=False)
+    fig.add_scatter(x=x, y=df["DERatio"], name="D/Eレシオ",
+                    mode="lines+markers", row=4, col=1, secondary_y=True)
+    fig.add_scatter(x=x, y=df["PER"], name="PER", mode="lines+markers", row=5, col=1)
+    fig.add_scatter(x=x, y=df["PBR"], name="PBR", mode="lines+markers", row=6, col=1)
+    fig.update_yaxes(title_text="%", row=4, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="倍", row=4, col=1, secondary_y=True)
     fig.update_layout(
         title=f"{name}（{sec_code}）財務・指標推移",
-        height=1400, barmode="group", hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=-0.05),
+        height=1900, barmode="group", hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=-0.04),
     )
     return fig
 

@@ -9,4 +9,6 @@ references/edinet/*.txt
 
 # Local manual testing area (Skill copy + history.md + ad-hoc artifacts).
 # Issues found during manual testing are recorded under bugs/ or enhancements/.
+# The trailing glob also covers numbered dirs (manual_test_01/, manual_test_02/, ...).
 manual_test/
+manual_test_*/
