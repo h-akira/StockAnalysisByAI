@@ -52,10 +52,12 @@ FinanceSource/
 ## 設計ドキュメント（Single Source of Truth）
 
 本プロジェクトの設計の正は以下に集約されている。実装着手前に必ず関連箇所を読むこと。
+**まず [architecture.md](architecture.md) を読んで全体像を掴むこと。**
 
 | ファイル | 責務 |
 |---------|------|
-| `init_plan.md` | **本プロジェクトの SSoT**。初期計画ドキュメント。全体設計、ディレクトリ構成、キャッシュポリシー、Phase 計画と完了条件、リスク管理 |
+| `architecture.md` | **現行アーキテクチャの正**。Mermaid 図つきの入口。`init_plan.md` を上書きする（init_plan は不可侵なので設計の進化は本ファイルに集約） |
+| `init_plan.md` | **初期計画の SSoT（不可侵・凍結）**。全体設計、ディレクトリ構成、キャッシュポリシー、Phase 計画と完了条件、リスク管理。設計の経緯の参照用。現行の正は `architecture.md` |
 | `pre-research/edinet/verification_plan.md` | 設計検証フェーズの計画（Step 1〜7） |
 | `pre-research/edinet/verification_results.md` | 設計検証の実機結果と教訓（株式分割問題、XBRL要素揺れ等） |
 | `pre-research/edinet/xbrl_company_variation.md` | XBRL 会社別差異のナレッジ（本実装での対処方針含む） |
@@ -171,8 +173,12 @@ env/bin/pytest tests/
 
 以下の開発ルールを必ず守ること。
 
-- **`init_plan.md` を Single Source of Truth とする**: 設計判断は `init_plan.md` を最上位とし、各種 docs は plan を補強・詳細化する関係。`init_plan.md` と他 docs に矛盾が見つかったら `init_plan.md` を正として判断、必要なら ↓ で許可を取って修正する
-- **`init_plan.md` の変更には開発者の許可が必要**: 設計の根幹に影響するため、変更前に必ず開発者に確認を取ること
+- **`architecture.md` を現行設計の正とする**: 設計判断は `architecture.md` を最上位とする。各種 docs は
+  これを補強・詳細化する関係。`architecture.md` と他 docs に矛盾が見つかったら `architecture.md` を正として
+  判断する。設計が進化したら（開発者の合意のうえで）`architecture.md` を更新する
+- **`init_plan.md` は不可侵（凍結）**: 初期計画の記録であり**書き換えない**。設計の経緯の参照用として残す。
+  init_plan.md と現行設計が食い違う場合は `architecture.md` を正とし、上書き内容は `architecture.md`
+  （または別の設計改訂ノート）に記す。init_plan.md 本体には手を入れない
 - **Markdown 内の AI 指示コメントを確認する**: Markdown ファイル内に HTML コメント（`<!-- ... -->`）がある場合、AI 向けの編集指示が含まれている可能性がある。指示に従うこと。先頭行（1 行目）の AI 指示はファイル全体に適用されるルールであるため、編集箇所に関わらず必ず確認すること。先頭行以外は関連箇所の編集時のみ確認すればよい。AI 指示コメントには 2 種類ある:
   - `<!-- AI instruction: ... -->`: 対応完了後にコメントを削除する
   - `<!-- AI instruction (pinned): ... -->`: 対応後もコメントを削除してはならない（永続的なルール）
