@@ -7,6 +7,13 @@
 
 - **このファイルが示すのは「あるべき設計」**。設計の正としてこの姿を基準にする。
   実装の進捗・個別の課題は `bugs/` `enhancements/` で管理する（本ファイルでは扱わない）。
+- **現状との差分に注意**: あるべき設計の一部は**まだ実装途上**で、`enhancements/` で具体化・実装される。
+  特に — レポート生成の `assets/` 化と評価→編集→再実行フロー・一次/代替 JSON の元データ/計算値分離は
+  [ENH-007](enhancements/007_ai_driven_report_layer.md)、PBR の分割補正は
+  [ENH-008](enhancements/008_pbr_split_adjustment.md)、銘柄固有キャッシュの CWD 移設は
+  [ENH-009](enhancements/009_cache_relocation_cwd.md) が担う。現行コードは一部これと異なる
+  （例: レポート実装は現状 `scripts/html_report.py`、キャッシュは全て Skill 配下）。各章で目標と現状が
+  違う箇所はこれらの ENH を参照。
 - **位置づけ**: [init_plan.md](init_plan.md) は初期計画の記録で**不可侵（凍結）**。本ファイルが現行設計の正。
   開発ルールは [AGENTS.md](AGENTS.md)。なお [SKILL.md](skills/japan-stock-analysis/SKILL.md) は設計文書ではなく
   **Skill 配布物の一部**（Claude が実行時に従うエントリ手順書）であり、本ファイルとは別物。
@@ -173,6 +180,24 @@ EDINET の `documents.json` API は**日付単位**で全社の提出書類を�
 
 > 手動テストでは bootstrap 分（documents/ ＋ company_map）のみ使い回し、銘柄固有分は各 CWD に生成・破棄する
 > （[AGENTS.md](AGENTS.md) §手動テスト）。経緯は init_plan.md §3.2 / §3.5（不可侵。現行の正は本ファイル）。
+
+### ユーザー CWD の中身（1 銘柄分析の作業場）
+
+銘柄固有のものは成果物・キャッシュ・AI 生成スクリプトすべて CWD に集まる。下図は目標レイアウト
+（`📁?` は ENH-007/009 で確定する暫定。実際のディレクトリ名・gitignore 方針は両 ENH の未確定事項で詰める）:
+
+```
+ユーザー CWD/                      （例: 投資検討プロジェクトのフォルダ）
+├── report_9432.html              成果物: レポート
+├── data_9432.json                成果物: 一次 JSON（不可侵。元データ + 計算値）
+├── data_9432_adjusted.json       成果物: 代替 JSON（AI 補正後・全量。あれば優先）
+├── scripts/                      AI が作る加工/分析スクリプト（銘柄番号命名・日付なし）
+│   ├── 9432_report.py            assets/ の参考実装のコピー（必要時に編集）
+│   ├── 9432_*.py                 補正・独自指標などの加工スクリプト
+│   └── README.md                 各スクリプトの目的・入出力・補正根拠（必須）
+└── 📁? 銘柄固有キャッシュ          xbrl/ derived/ mappings/ split_adjust/ prices/
+                                   （ENH-009 で CWD へ移す。置き場名は未確定）
+```
 
 ---
 

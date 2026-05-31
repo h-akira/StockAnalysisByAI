@@ -64,16 +64,31 @@ split_adjust と同じ「最新報告書の Prior*YearInstant を引く」方式
 restated EPS の仕組みをそのまま BPS に横展開する。一次計算（固定スクリプト）の段階で PBR を補正済みに
 する。監査可能で pytest 回帰も効く。EPS で実績のある方式の素直な拡張。**推奨**。
 
-### 案2: ENH-007 の AI 裁量レイヤで対処
+### 案2: ENH-007 の AI 裁量レイヤで対処 — 不採用
 
-[ENH-007](007_ai_driven_report_layer.md) の枠組みで、AI が PBR 異常を検出し `./scripts/{code}_pbr_split_adjust.py`
-を生成して代替 JSON に補正 PBR を出す。会社固有の分割事情に柔軟だが、毎回 AI が判断するため一次計算の
-監査性は案1 に劣る。**ENH-007 の最初の適用例**としては有効。
+[ENH-007](007_ai_driven_report_layer.md) の枠組みで、AI が PBR 異常を検出し代替 JSON で補正 PBR を出す案。
+会社固有の分割事情に柔軟だが、毎回 AI が判断するため一次計算の監査性・再現性が案1 に劣る。
+**PBR 分割補正は EPS と対称な全銘柄共通の一般処理であり、AI 裁量に回すべき「例外」ではない**ため採らない。
 
-> 方針: PBR の分割補正は EPS と完全に対称な一般的処理なので、**案1（固定スクリプトで restated BPS を
-> 実装）を根本対処とする**のが素直。ENH-007（案2）は「固定で拾いきれない会社固有の例外」を補う層で、
-> PBR のような一般的補正はむしろ固定側に入れて土台を厚くすべき。両者は排他ではなく、案1 を本線、
-> ENH-007 を例外対応の受け皿とする。
+> 方針: PBR の分割補正は EPS と完全に対称な一般的処理なので、**案1（固定スクリプトで restated BPS を実装）を
+> 採用**する。ENH-007（AI 裁量レポート層）は「固定で一般化しづらい例外・雛形外要望」を扱う層であり、
+> PBR のような一般補正は固定側（本 enhancement）に入れて土台を厚くするのが正しい住み分け。
+> **ENH-007 の対象例ではない**（ENH-007 側でもそう統一済み）。
+
+## 未確定事項（実装前に調査・確定する）
+
+1. **IFRS 版 BPS 遡及要素の実在・正式名の調査**: 1 株当たり純資産の遡及列が実在することは
+   **東京ガス（JGAAP）の escalation payload で `NetAssetsPerShareSummaryOfBusinessResults` を確認した**のみ。
+   EPS では IFRS 版（`...IFRSSummaryOfBusinessResults`）と JGAAP 版が別要素だった前例があり
+   （`xbrl_extract.py` の `EPS_SUMMARY_ELEMENTS`）、BPS も **IFRS 採用銘柄（例: NTT 9432）で要素名が異なる/
+   存在しない可能性**がある。「EPS と完全対称」と断じる前に、IFRS・JGAAP 双方で実在要素名を実機確認し、
+   要件の「（または相当要素）」を具体化する。取れない基準の銘柄は生 BPS フォールバック＋warning。
+2. **5 年窓超の古い期は補正後も NaN になる制約の明示**: restated EPS と同様、最新有報の遡及列は通常
+   過去 5 年分しかカバーしない。**NTT は 7 期中、補正できるのは最大 5 期で、最古の数期は補正 BPS が無く
+   NaN になる**。「補正すれば全期連続化する」わけではない点を要件・warning に明記する
+   （PER が 5 年窓外で NaN なのと同じ制約が PBR にも波及）。
+3. **pytest fixture の追加**: 分割をまたぐ銘柄（理想は IFRS・JGAAP 各 1）の BPS 遡及列を含む fixture で、
+   補正前後の PBR と窓外 NaN の挙動を回帰テストできるようにする。
 
 ## 対応
 
@@ -83,5 +98,6 @@ restated EPS の仕組みをそのまま BPS に横展開する。一次計算�
 
 - レビュー: [manual_test_03/review_report.md](../manual_test_03/review_report.md) §3.1
 - [split_adjust.py](../skills/japan-stock-analysis/scripts/split_adjust.py): restated EPS（本件の対称な先行実装）
-- [ENH-007](007_ai_driven_report_layer.md): AI 裁量レポート層（例外対応の受け皿・案2）
+- [ENH-007](007_ai_driven_report_layer.md): AI 裁量レポート層。PBR 補正は本 enhancement（固定側）が担い、
+  ENH-007 の対象ではない、と両ファイルで統一済み
 - [SKILL.md](../skills/japan-stock-analysis/SKILL.md) §8: 「PBR は分割未補正」の既知制約（本件で解消を目指す）
